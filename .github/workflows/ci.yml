@@ -1,0 +1,80 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [dev, main]
+  pull_request:
+    branches: [dev, main]
+
+jobs:
+  backend-tests:
+    name: Django backend tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: aistp_db
+          POSTGRES_USER: aistp_user
+          POSTGRES_PASSWORD: devpassword123
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        working-directory: ./backend
+        run: pip install -r requirements.txt
+
+      - name: Run migrations
+        working-directory: ./backend
+        env:
+          DJANGO_SECRET_KEY: ci-test-secret
+          DATABASE_URL: postgresql://aistp_user:devpassword123@localhost:5432/aistp_db
+        run: python manage.py migrate
+
+      - name: Run tests
+        working-directory: ./backend
+        env:
+          DJANGO_SECRET_KEY: ci-test-secret
+          DATABASE_URL: postgresql://aistp_user:devpassword123@localhost:5432/aistp_db
+          GEMINI_API_KEY: ci-placeholder
+        run: python manage.py test
+
+  frontend-tests:
+    name: React/Next.js frontend tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        working-directory: ./frontend
+        run: npm install
+
+      - name: Run lint check
+        working-directory: ./frontend
+        run: npm run lint
+
+      - name: Build check
+        working-directory: ./frontend
+        run: npm run build
