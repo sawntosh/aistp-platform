@@ -14,6 +14,23 @@ export async function apiFetch(path, options = {}) {
     ...options.headers,
   };
   const res = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
-  if (!res.ok) throw new Error(`API error: ${res.status}`);
-  return res.json();
+  const contentType = res.headers.get("content-type") || "";
+  const body = contentType.includes("application/json") ? await res.json() : null;
+
+  if (!res.ok) {
+    const error = new Error(`API error: ${res.status}`);
+    error.status = res.status;
+    error.body = body;
+    throw error;
+  }
+  return body;
+}
+
+// Pulls the first message out of a DRF error body (field errors or {detail}).
+export function getErrorMessage(error, fallback) {
+  const body = error?.body;
+  if (!body || typeof body !== "object") return fallback;
+  const firstValue = Object.values(body)[0];
+  if (Array.isArray(firstValue)) return String(firstValue[0]);
+  return firstValue ? String(firstValue) : fallback;
 }
