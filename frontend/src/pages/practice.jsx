@@ -78,7 +78,7 @@ export default function PracticePage() {
 
   if (isLoadingQuestions) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-gray-500">
+      <div className="min-h-[calc(100vh-49px)] flex items-center justify-center text-gray-500">
         Loading questions…
       </div>
     );
@@ -86,24 +86,30 @@ export default function PracticePage() {
 
   if (loadError && questions.length === 0) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-red-600">
+      <div className="min-h-[calc(100vh-49px)] flex items-center justify-center text-red-600">
         {loadError}
       </div>
     );
   }
 
   if (isSessionComplete) {
+    const scorePercent = Math.round((correctCount / questions.length) * 100);
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-        <div className="w-full max-w-sm bg-white rounded-xl shadow p-8 text-center">
+      <div className="min-h-[calc(100vh-49px)] flex items-center justify-center bg-gray-50 px-4">
+        <div className="w-full max-w-sm bg-white rounded-xl shadow p-8 text-center animate-pop">
           <h1 className="text-2xl font-semibold text-gray-900 mb-2">Session complete</h1>
-          <p className="text-gray-600 mb-6">
-            You scored {correctCount} / {questions.length}
+          <p
+            className={`text-3xl font-semibold mb-1 ${
+              scorePercent >= 70 ? "text-green-600" : scorePercent >= 40 ? "text-yellow-600" : "text-red-600"
+            }`}
+          >
+            {correctCount} / {questions.length}
           </p>
+          <p className="text-gray-500 mb-6">{scorePercent}% correct</p>
           <button
             type="button"
             onClick={() => router.reload()}
-            className="w-full rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500"
+            className="w-full rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white transition-all hover:bg-indigo-500 active:scale-[0.98]"
           >
             Start another session
           </button>
@@ -112,35 +118,48 @@ export default function PracticePage() {
     );
   }
 
+  const progressPercent = ((currentIndex + (result ? 1 : 0)) / questions.length) * 100;
+
   return (
-    <div className="min-h-screen bg-gray-50 px-4 py-10">
+    <div className="min-h-[calc(100vh-49px)] bg-gray-50 px-4 py-10">
       <div className="mx-auto max-w-2xl">
-        <div className="mb-4 flex items-center justify-between text-sm text-gray-500">
+        <div className="mb-2 flex items-center justify-between text-sm text-gray-500">
           <span>
             Question {currentIndex + 1} of {questions.length}
           </span>
-          <span>Score: {correctCount}</span>
+          <span className="rounded-full bg-indigo-50 px-2.5 py-0.5 font-medium text-indigo-700">
+            Score: {correctCount}
+          </span>
         </div>
 
-        <QuestionCard
-          question={currentQuestion}
-          selectedOptionId={selectedOptionId}
-          onSelectOption={handleSelectOption}
-          isAnswered={Boolean(result)}
-          correctOptionId={result?.correctOptionId}
-        />
-
-        {result && (
-          <FeedbackPanel
-            isCorrect={result.isCorrect}
-            correctOptionText={result.correctOptionText}
-            questionId={currentQuestion.id}
-            onNext={handleNext}
-            isLastQuestion={isLastQuestion}
+        <div className="mb-6 h-1.5 w-full overflow-hidden rounded-full bg-gray-200">
+          <div
+            className="h-full rounded-full bg-indigo-500 transition-all duration-300 ease-out"
+            style={{ width: `${progressPercent}%` }}
           />
-        )}
+        </div>
 
-        {loadError && <p className="mt-4 text-sm text-red-600">{loadError}</p>}
+        <div key={currentIndex} className="animate-fade-in">
+          <QuestionCard
+            question={currentQuestion}
+            selectedOptionId={selectedOptionId}
+            onSelectOption={handleSelectOption}
+            isAnswered={Boolean(result)}
+            correctOptionId={result?.correctOptionId}
+          />
+
+          {result && (
+            <FeedbackPanel
+              isCorrect={result.isCorrect}
+              correctOptionText={result.correctOptionText}
+              questionId={currentQuestion.id}
+              onNext={handleNext}
+              isLastQuestion={isLastQuestion}
+            />
+          )}
+        </div>
+
+        {loadError && <p className="mt-4 text-sm text-red-600 animate-fade-in">{loadError}</p>}
       </div>
     </div>
   );

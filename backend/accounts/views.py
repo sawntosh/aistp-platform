@@ -4,17 +4,18 @@ Login issues a JWT via SimpleJWT; register hashes the password via
 Django's built-in auth (bcrypt hasher configured in settings).
 """
 from rest_framework import generics, permissions
-from rest_framework.response import Response
-from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
+
+from .models import User
+from .serializers import RegisterSerializer
 
 
 class RegisterView(generics.CreateAPIView):
-    """TODO: implement RegisterSerializer (email, password, confirm password)."""
+    """FR-01: create a new student account. Issues no tokens -- the
+    client logs in separately afterwards."""
     permission_classes = [permissions.AllowAny]
-
-    def post(self, request, *args, **kwargs):
-        raise NotImplementedError
+    queryset = User.objects.all()
+    serializer_class = RegisterSerializer
 
 
 class LoginView(TokenObtainPairView):

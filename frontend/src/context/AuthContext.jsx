@@ -1,11 +1,18 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import * as authService from "../services/authService";
+import { onSessionExpired } from "../services/apiClient";
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  // If a mid-session token refresh ever fails (refresh token expired/revoked),
+  // drop the logged-in user so guarded pages redirect to /login on their own.
+  useEffect(() => {
+    onSessionExpired(() => setUser(null));
+  }, []);
 
   // On first load, try to turn a stored refresh token into a live session.
   useEffect(() => {
