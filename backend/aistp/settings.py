@@ -115,20 +115,10 @@ WSGI_APPLICATION = 'aistp.wsgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
-#
-# DATABASE_URL (set in .env) points at PostgreSQL (Supabase) for
-# staging/production. When it is unset, this falls back to a local
-# SQLite file so the backend runs out of the box in dev — see
-# backend/README.md for details.
 
 DATABASES = {
     "default": dj_database_url.config(
-        default=os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR / 'db.sqlite3'}"),
-        # Keep pooled connections alive between requests against Supabase
-        # Postgres instead of reconnecting every request; harmless no-ops
-        # on SQLite.
-        conn_max_age=int(os.getenv("DB_CONN_MAX_AGE", "600")),
-        conn_health_checks=True,
+        default=os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR / 'db.sqlite3'}")
     )
 }
 
