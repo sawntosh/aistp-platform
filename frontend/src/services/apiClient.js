@@ -93,11 +93,17 @@ export async function apiFetch(path, options = {}) {
   return body;
 }
 
-// Pulls the first message out of a DRF error body (field errors or {detail}).
+// Flattens every message out of a DRF error body (field errors, non_field_errors,
+// {detail}) instead of only the first, so multi-field validation failures aren't
+// silently dropped.
 export function getErrorMessage(error, fallback) {
   const body = error?.body;
   if (!body || typeof body !== "object") return fallback;
-  const firstValue = Object.values(body)[0];
-  if (Array.isArray(firstValue)) return String(firstValue[0]);
-  return firstValue ? String(firstValue) : fallback;
+
+  const messages = Object.values(body)
+    .flatMap((value) => (Array.isArray(value) ? value : [value]))
+    .filter(Boolean)
+    .map(String);
+
+  return messages.length ? messages.join(" ") : fallback;
 }
