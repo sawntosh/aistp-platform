@@ -1,34 +1,41 @@
-// Central fetch wrapper — attaches JWT from memory to every request, and
-// owns refresh-token persistence + silent access-token refresh on 401.
+// Central fetch wrapper — attaches JWT from memory to every request and
+// transparently refreshes an expired access token before failing a request.
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
 const REFRESH_TOKEN_KEY = "aistp_refresh_token";
-const REFRESH_PATH = "/auth/refresh/";
+
+// Endpoints that must never trigger a refresh-and-retry themselves —
+// otherwise a bad login attempt or an expired refresh token could loop.
+const NO_REFRESH_PATHS = new Set(["/auth/login/", "/auth/register/", "/auth/refresh/"]);
 
 let inMemoryToken = null;
-let refreshPromise = null;
-let sessionExpiredHandler = null;
+let refreshPromise = null; // shared in-flight refresh, so concurrent 401s only trigger one call
+let unauthorizedHandler = null;
 
 export function setToken(token) {
   inMemoryToken = token;
 }
 
-export function setRefreshToken(refresh) {
-  window.localStorage.setItem(REFRESH_TOKEN_KEY, refresh);
+export function setRefreshToken(token) {
+  if (typeof window === "undefined") return;
+  if (token) {
+    window.localStorage.setItem(REFRESH_TOKEN_KEY, token);
+  } else {
+    window.localStorage.removeItem(REFRESH_TOKEN_KEY);
+  }
 }
 
-export function clearTokens() {
-  inMemoryToken = null;
-  window.localStorage.removeItem(REFRESH_TOKEN_KEY);
+export function getRefreshToken() {
+  if (typeof window === "undefined") return null;
+  return window.localStorage.getItem(REFRESH_TOKEN_KEY);
 }
 
-// Called once by AuthContext so a refresh that fails mid-session (expired/
-// revoked refresh token) can clear the logged-in user and let the existing
-// page-level "redirect to /login if no user" guards take over.
-export function onSessionExpired(handler) {
-  sessionExpiredHandler = handler;
+// Called by AuthContext so apiClient can clear session state when a refresh
+// ultimately fails (e.g. refresh token expired/revoked mid-session).
+export function setUnauthorizedHandler(handler) {
+  unauthorizedHandler = handler;
 }
 
-async function rawFetch(path, options) {
+async function rawRequest(path, options) {
   const headers = {
     "Content-Type": "application/json",
     ...(inMemoryToken ? { Authorization: `Bearer ${inMemoryToken}` } : {}),
@@ -40,14 +47,12 @@ async function rawFetch(path, options) {
   return { res, body };
 }
 
-// Exchanges the stored refresh token for a fresh access token. Concurrent
-// 401s share one in-flight refresh instead of each firing their own.
-export function refreshAccessToken() {
-  const refresh = window.localStorage.getItem(REFRESH_TOKEN_KEY);
+function refreshAccessToken() {
+  const refresh = getRefreshToken();
   if (!refresh) return Promise.resolve(null);
 
   if (!refreshPromise) {
-    refreshPromise = rawFetch(REFRESH_PATH, {
+    refreshPromise = rawRequest("/auth/refresh/", {
       method: "POST",
       body: JSON.stringify({ refresh }),
     })
@@ -57,8 +62,9 @@ export function refreshAccessToken() {
         return body.access;
       })
       .catch(() => {
-        clearTokens();
-        sessionExpiredHandler?.();
+        setToken(null);
+        setRefreshToken(null);
+        if (unauthorizedHandler) unauthorizedHandler();
         return null;
       })
       .finally(() => {
@@ -69,15 +75,12 @@ export function refreshAccessToken() {
 }
 
 export async function apiFetch(path, options = {}) {
-  let { res, body } = await rawFetch(path, options);
+  let { res, body } = await rawRequest(path, options);
 
-  // Access token expired mid-session -- refresh once and retry before
-  // surfacing the error. Skip for the refresh call itself and for requests
-  // that were never authenticated to begin with (e.g. login/register).
-  if (res.status === 401 && inMemoryToken && path !== REFRESH_PATH) {
-    const refreshed = await refreshAccessToken();
-    if (refreshed) {
-      ({ res, body } = await rawFetch(path, options));
+  if (res.status === 401 && !NO_REFRESH_PATHS.has(path)) {
+    const refreshedToken = await refreshAccessToken();
+    if (refreshedToken) {
+      ({ res, body } = await rawRequest(path, options));
     }
   }
 

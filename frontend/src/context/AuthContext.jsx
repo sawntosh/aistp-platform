@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import * as authService from "../services/authService";
-import { onSessionExpired } from "../services/apiClient";
+import { setUnauthorizedHandler } from "../services/apiClient";
 
 const AuthContext = createContext(null);
 
@@ -8,10 +8,11 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // If a mid-session token refresh ever fails (refresh token expired/revoked),
-  // drop the logged-in user so guarded pages redirect to /login on their own.
+  // apiClient calls this if a background token refresh ultimately fails
+  // (e.g. the refresh token itself expired), so the UI drops back to logged-out.
   useEffect(() => {
-    onSessionExpired(() => setUser(null));
+    setUnauthorizedHandler(() => setUser(null));
+    return () => setUnauthorizedHandler(null);
   }, []);
 
   // On first load, try to turn a stored refresh token into a live session.

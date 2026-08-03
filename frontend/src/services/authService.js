@@ -1,4 +1,4 @@
-import { apiFetch, clearTokens, refreshAccessToken, setRefreshToken, setToken } from "./apiClient";
+import { apiFetch, getRefreshToken, setRefreshToken, setToken } from "./apiClient";
 
 export async function register({ username, email, password, confirmPassword }) {
   return apiFetch("/auth/register/", {
@@ -25,7 +25,19 @@ export async function login({ username, password }) {
 // Called on app load: exchanges a stored refresh token for a fresh access
 // token so the session survives a page reload (access token only lives in memory).
 export async function refreshSession() {
-  return refreshAccessToken();
+  if (!getRefreshToken()) return null;
+
+  try {
+    const data = await apiFetch("/auth/refresh/", {
+      method: "POST",
+      body: JSON.stringify({ refresh: getRefreshToken() }),
+    });
+    setToken(data.access);
+    return data.access;
+  } catch {
+    setRefreshToken(null);
+    return null;
+  }
 }
 
 export async function fetchCurrentUser() {
@@ -33,5 +45,6 @@ export async function fetchCurrentUser() {
 }
 
 export function logout() {
-  clearTokens();
+  setToken(null);
+  setRefreshToken(null);
 }
