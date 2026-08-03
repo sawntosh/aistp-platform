@@ -1,3 +1,5 @@
+<a name="readme-top"></a>
+
 <div align="center">
 
 # 🧠 AISTP Platform
@@ -27,6 +29,8 @@ An ISTQB CTFL v4.0 exam-prep platform with Gemini-powered explanations and domai
 - 📊 **Analytics dashboard** — accuracy broken down per syllabus domain
 - 🛠️ **Admin CRUD** for managing questions and domains
 
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
 ## 🧱 Tech Stack
 
 | Layer      | Technology                                              |
@@ -36,6 +40,8 @@ An ISTQB CTFL v4.0 exam-prep platform with Gemini-powered explanations and domai
 | Auth       | djangorestframework-simplejwt, bcrypt                      |
 | Database   | PostgreSQL (Supabase free tier)                            |
 | AI         | Google Gemini API (`gemini-1.5-flash`)                     |
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ## 🚀 Getting Started
 
@@ -76,6 +82,8 @@ npm run dev
 
 App runs at `http://localhost:3000` · API at `http://127.0.0.1:8000/api/` · Admin at `http://127.0.0.1:8000/admin/`
 
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
 ## 📁 Project Structure
 
 ```
@@ -113,9 +121,21 @@ aistp-platform/
 - [ ] Analytics dashboard polish
 - [ ] CI/CD deployment pipeline
 
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+## 👥 Top Contributors
+
+<a href="https://github.com/sawntosh/aistp-platform/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=sawntosh/aistp-platform" alt="contrib.rocks image" />
+</a>
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
 ## 📄 License
 
 Distributed under the MIT License. See `LICENSE` for details.
 
 ## 📬 Contact
 Project: [github.com/sawntosh/aistp-platform](https://github.com/sawntosh/aistp-platform)
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
