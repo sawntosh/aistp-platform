@@ -7,7 +7,7 @@ from rest_framework import generics, permissions
 from rest_framework_simplejwt.views import TokenObtainPairView
 
 from .models import User
-from .serializers import RegisterSerializer
+from .serializers import RegisterSerializer, UserSerializer
 
 
 class RegisterView(generics.CreateAPIView):
@@ -23,3 +23,13 @@ class LoginView(TokenObtainPairView):
     throttle_scope = "login" maps to REST_FRAMEWORK.DEFAULT_THROTTLE_RATES.
     """
     throttle_scope = "login"
+
+
+class MeView(generics.RetrieveAPIView):
+    """Returns the authenticated user; called by the frontend right after
+    login and on session restore."""
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = UserSerializer
+
+    def get_object(self):
+        return self.request.user
