@@ -60,6 +60,16 @@ export default function NavBar() {
         ) : (
           <div className="flex items-center gap-2">
             <Link
+              href="/practice"
+              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                router.pathname === "/practice"
+                  ? "bg-indigo-50 text-indigo-700"
+                  : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+              }`}
+            >
+              Practice
+            </Link>
+            <Link
               href="/login"
               className="rounded-md px-3 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900"
             >

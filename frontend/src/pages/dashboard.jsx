@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
+import Link from "next/link";
 import { useAuth } from "../context/AuthContext";
 import { fetchDashboardAnalytics } from "../services/analyticsService";
 import { useCountUp } from "../hooks/useCountUp";
@@ -73,7 +74,27 @@ export default function DashboardPage() {
   const filteredSessions = sessionLimit ? sortedByDate.slice(0, sessionLimit) : sessions;
 
   return (
-    <div className="min-h-[calc(100vh-49px)] bg-gray-50 px-4 py-10">
+    <div className="relative min-h-[calc(100vh-49px)] bg-gray-50 px-4 py-10">
+      <Link
+        href="/practice"
+        className="absolute top-6 left-4 flex items-center justify-center w-10 h-10 rounded-full bg-white/70 shadow-sm transition hover:bg-white"
+        aria-label="Go to practice"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <polygon points="6 3 20 12 6 21 6 3" />
+        </svg>
+      </Link>
+
       <div className="mx-auto max-w-5xl">
         <h1 className="text-2xl font-semibold text-gray-900 mb-1">Your analytics</h1>
         <p className="text-sm text-gray-500 mb-6">
