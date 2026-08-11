@@ -9,6 +9,7 @@ export default function FeedbackPanel({
   isLastQuestion,
 }) {
   const [explanation, setExplanation] = useState(null);
+  const [isExplanationFallback, setIsExplanationFallback] = useState(false);
   const [isLoadingExplanation, setIsLoadingExplanation] = useState(false);
   const [explanationError, setExplanationError] = useState("");
 
@@ -18,6 +19,7 @@ export default function FeedbackPanel({
     try {
       const data = await fetchExplanation(questionId);
       setExplanation(data.explanation);
+      setIsExplanationFallback(Boolean(data.is_fallback));
     } catch {
       setExplanationError("Couldn't load an explanation right now. Try again.");
     } finally {
@@ -71,6 +73,11 @@ export default function FeedbackPanel({
         {explanationError && <p className="mt-2 text-sm text-red-600">{explanationError}</p>}
         {explanation && (
           <div className="mt-2 rounded-lg bg-white border border-gray-200 p-3 text-sm text-gray-700">
+            {isExplanationFallback && (
+              <p className="mb-1.5 text-xs font-medium text-amber-600">
+                AI tutor is temporarily unavailable — showing a basic explanation.
+              </p>
+            )}
             {explanation}
           </div>
         )}

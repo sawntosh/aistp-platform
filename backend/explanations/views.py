@@ -8,7 +8,12 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from questions.models import Question
-from services.gemini_service import GEMINI_MODEL, GeminiServiceError, generate_explanation
+from services.gemini_service import (
+    GEMINI_MODEL,
+    GeminiServiceError,
+    build_fallback_explanation,
+    generate_explanation,
+)
 
 from .models import AIExplanation
 from .serializers import AIExplanationSerializer, ExplainRequestSerializer
@@ -45,10 +50,16 @@ class ExplainView(APIView):
                 correct_option.text,
             )
         except GeminiServiceError:
-            return Response(
-                {"detail": "The AI tutor is unavailable right now. Please try again shortly."},
-                status=status.HTTP_502_BAD_GATEWAY,
+            # Gemini is down/rate-limited/returned nothing: degrade to a
+            # canned explanation instead of failing the request outright
+            # (NFR-02 availability). Not cached, so the next request for
+            # this question retries Gemini rather than being stuck with
+            # the fallback text forever.
+            fallback_text = build_fallback_explanation(
+                [option.text for option in options],
+                correct_option.text,
             )
+            return Response({"explanation": fallback_text, "is_fallback": True})
 
         # get_or_create guards against a duplicate-key race if two requests
         # for the same (uncached) question land concurrently.

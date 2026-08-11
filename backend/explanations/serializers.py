@@ -12,7 +12,14 @@ class ExplainRequestSerializer(serializers.Serializer):
 
 class AIExplanationSerializer(serializers.ModelSerializer):
     explanation = serializers.CharField(source="explanation_text")
+    # Always False here: a persisted AIExplanation is only ever created from
+    # a real Gemini response (see ExplainView) -- the fallback path never
+    # reaches this serializer. Included so the response contract is stable.
+    is_fallback = serializers.SerializerMethodField()
 
     class Meta:
         model = AIExplanation
-        fields = ("explanation",)
+        fields = ("explanation", "is_fallback")
+
+    def get_is_fallback(self, obj):
+        return False
