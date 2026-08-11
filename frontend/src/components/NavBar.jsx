@@ -49,6 +49,16 @@ export default function NavBar() {
                 </Link>
               );
             })}
+            <Link
+              href="/about"
+              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                router.pathname === "/about"
+                  ? "bg-indigo-50 text-indigo-700"
+                  : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+              }`}
+            >
+              About
+            </Link>
             <button
               type="button"
               onClick={handleLogout}
@@ -59,6 +69,16 @@ export default function NavBar() {
           </div>
         ) : (
           <div className="flex items-center gap-2">
+            <Link
+              href="/about"
+              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                router.pathname === "/about"
+                  ? "bg-indigo-50 text-indigo-700"
+                  : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+              }`}
+            >
+              About
+            </Link>
             <Link
               href="/login"
               className="rounded-md px-3 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900"
