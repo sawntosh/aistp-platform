@@ -85,7 +85,28 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="flex min-h-screen w-full items-center justify-center bg-gradient-to-b from-orange-50 via-amber-100 to-amber-200 px-4 py-12">
+    <div className="relative flex min-h-screen w-full items-center justify-center bg-gradient-to-b from-orange-50 via-amber-100 to-amber-200 px-4 py-12">
+      <Link
+        href="/"
+        className="absolute top-6 left-6 flex items-center justify-center w-10 h-10 rounded-full bg-white/70 hover:bg-white transition"
+        aria-label="Back to home"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+          <polyline points="9 22 9 12 15 12 15 22" />
+        </svg>
+      </Link>
+
       <div className="w-full max-w-sm rounded-[2rem] bg-white p-8 shadow-xl">
         <div className="mb-6 flex flex-col items-center text-center">
           <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-amber-300 to-orange-400 text-2xl shadow-md">

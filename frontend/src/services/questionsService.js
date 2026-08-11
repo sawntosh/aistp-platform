@@ -1,7 +1,9 @@
 import { apiFetch } from "./apiClient";
 
-export async function fetchPracticeQuestions(count = 10) {
-  return apiFetch(`/questions/?count=${count}`);
+export async function fetchPracticeQuestions(count = 10, domains = []) {
+  const params = new URLSearchParams({ count: String(count) });
+  if (domains.length) params.set("domains", domains.join(","));
+  return apiFetch(`/questions/?${params.toString()}`);
 }
 
 export async function submitAnswer({ sessionId, questionId, optionId }) {
