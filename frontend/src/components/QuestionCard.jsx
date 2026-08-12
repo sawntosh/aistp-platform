@@ -15,7 +15,7 @@ export default function QuestionCard({
 }) {
   if (!question) return null;
 
-  const domainColor = getDomainColor(question.domain);
+  const domainColor = getDomainColor(question.domain?.name);
 
   return (
     <div className="bg-white rounded-xl shadow p-6">
@@ -23,7 +23,7 @@ export default function QuestionCard({
         <span
           className={`inline-block rounded-full px-3 py-1 text-xs font-medium ${domainColor.bg} ${domainColor.text}`}
         >
-          {question.domain}
+          {question.domain?.name}
         </span>
         <span
           className={`rounded-full px-2.5 py-0.5 text-xs font-medium uppercase tracking-wide ${
