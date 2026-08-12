@@ -46,10 +46,17 @@ class QuestionListView(APIView):
             return Response({"detail": "count must be an integer."}, status=status.HTTP_400_BAD_REQUEST)
         count = max(1, min(count, MAX_SESSION_SIZE))
 
-        questions = list(
-            Question.objects.filter(is_active=True).select_related("domain").prefetch_related("options")
-            .order_by("?")[:count]
-        )
+        questions_qs = Question.objects.filter(is_active=True).select_related("domain").prefetch_related("options")
+
+        domain_param = request.query_params.get("domain")
+        if domain_param:
+            try:
+                domain_id = int(domain_param)
+            except ValueError:
+                return Response({"detail": "domain must be an integer id."}, status=status.HTTP_400_BAD_REQUEST)
+            questions_qs = questions_qs.filter(domain_id=domain_id)
+
+        questions = list(questions_qs.order_by("?")[:count])
         if not questions:
             return Response({"detail": "No active questions available."}, status=status.HTTP_404_NOT_FOUND)
 

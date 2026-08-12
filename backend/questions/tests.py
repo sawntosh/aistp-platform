@@ -32,6 +32,21 @@ class QuestionDeliveryTests(APITestCase):
         response = self.client.get("/api/questions/")
         self.assertEqual(response.status_code, 401)
 
+    def test_question_list_filters_by_domain(self):
+        other_domain = Domain.objects.create(name="Static Testing")
+        other_question = Question.objects.create(domain=other_domain, text="Static testing Q")
+        AnswerOption.objects.create(question=other_question, text="A", is_correct=True)
+        AnswerOption.objects.create(question=other_question, text="B", is_correct=False)
+
+        response = self.client.get(f"/api/questions/?domain={self.domain.id}")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data["questions"]), 1)
+        self.assertEqual(response.data["questions"][0]["id"], self.question.id)
+
+    def test_question_list_rejects_non_integer_domain(self):
+        response = self.client.get("/api/questions/?domain=abc")
+        self.assertEqual(response.status_code, 400)
+
     def test_answer_submit_correct(self):
         session = PracticeSession.objects.create(user=self.user, question_count=1)
         response = self.client.post(
