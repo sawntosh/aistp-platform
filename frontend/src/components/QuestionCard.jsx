@@ -11,6 +11,8 @@ export default function QuestionCard({
   selectedOptionId,
   onSelectOption,
   onSubmit,
+  onSkip,
+  canSkip,
   isAnswered,
   isSubmitting,
   correctOptionId,
@@ -78,14 +80,27 @@ export default function QuestionCard({
       </div>
 
       {!isAnswered && (
-        <button
-          type="button"
-          onClick={onSubmit}
-          disabled={!selectedOptionId || isSubmitting}
-          className="mt-4 w-full rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white transition-all hover:bg-indigo-500 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {isSubmitting ? "Submitting…" : "Submit answer"}
-        </button>
+        <div className="mt-4 flex gap-3">
+          {canSkip && (
+            <button
+              type="button"
+              onClick={onSkip}
+              disabled={isSubmitting}
+              title="Come back to this question after the others"
+              className="rounded-md border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 transition-all hover:bg-gray-50 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Skip for now
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onSubmit}
+            disabled={!selectedOptionId || isSubmitting}
+            className="flex-1 rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white transition-all hover:bg-indigo-500 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isSubmitting ? "Submitting…" : "Submit answer"}
+          </button>
+        </div>
       )}
     </div>
   );

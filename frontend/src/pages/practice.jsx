@@ -16,9 +16,13 @@ export default function PracticePage() {
   const [isSettingUp, setIsSettingUp] = useState(true);
   const [selectedDomainId, setSelectedDomainId] = useState(null); // null = all domains mixed
 
-  const [questions, setQuestions] = useState([]);
+  // `queue` holds the questions still owed an answer, in the order they'll be
+  // shown. Skipping a question moves it from the front to the back instead
+  // of removing it, so it comes back around later in the same session.
+  const [queue, setQueue] = useState([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [skippedIds, setSkippedIds] = useState(() => new Set());
   const [sessionId, setSessionId] = useState(null);
-  const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedOptionId, setSelectedOptionId] = useState(null);
   const [result, setResult] = useState(null);
   const [correctCount, setCorrectCount] = useState(0);
@@ -46,9 +50,10 @@ export default function PracticePage() {
     setIsLoadingQuestions(true);
     try {
       const data = await fetchPracticeQuestions(SESSION_SIZE, domainId);
-      setQuestions(data.questions);
+      setQueue(data.questions);
+      setTotalCount(data.questions.length);
+      setSkippedIds(new Set());
       setSessionId(data.session_id);
-      setCurrentIndex(0);
       setSelectedOptionId(null);
       setResult(null);
       setCorrectCount(0);
@@ -63,13 +68,14 @@ export default function PracticePage() {
 
   function backToSetup() {
     setIsSettingUp(true);
-    setQuestions([]);
+    setQueue([]);
     setIsSessionComplete(false);
     setLoadError("");
   }
 
-  const currentQuestion = questions[currentIndex];
-  const isLastQuestion = currentIndex === questions.length - 1;
+  const currentQuestion = queue[0];
+  const isLastQuestion = queue.length === 1;
+  const currentPosition = totalCount - queue.length + 1;
   const activeDomainLabel = selectedDomainId
     ? (domains.find((d) => d.id === selectedDomainId)?.name ?? "Domain")
     : "All Domains";
@@ -77,6 +83,14 @@ export default function PracticePage() {
   function handleSelectOption(optionId) {
     if (result) return;
     setSelectedOptionId(optionId);
+    setLoadError("");
+  }
+
+  function handleSkip() {
+    if (result || queue.length <= 1) return;
+    setQueue((q) => [...q.slice(1), q[0]]);
+    setSkippedIds((s) => new Set(s).add(currentQuestion.id));
+    setSelectedOptionId(null);
     setLoadError("");
   }
 
@@ -103,11 +117,18 @@ export default function PracticePage() {
   }
 
   function handleNext() {
-    if (isLastQuestion) {
+    const remaining = queue.length - 1;
+    setSkippedIds((s) => {
+      if (!s.has(currentQuestion.id)) return s;
+      const next = new Set(s);
+      next.delete(currentQuestion.id);
+      return next;
+    });
+    setQueue((q) => q.slice(1));
+    if (remaining <= 0) {
       setIsSessionComplete(true);
       return;
     }
-    setCurrentIndex((i) => i + 1);
     setSelectedOptionId(null);
     setResult(null);
     setLoadError("");
@@ -168,7 +189,7 @@ export default function PracticePage() {
     );
   }
 
-  if (loadError && questions.length === 0) {
+  if (loadError && queue.length === 0) {
     return (
       <div className="min-h-[calc(100vh-49px)] flex items-center justify-center text-red-600">
         {loadError}
@@ -177,7 +198,7 @@ export default function PracticePage() {
   }
 
   if (isSessionComplete) {
-    const scorePercent = Math.round((correctCount / questions.length) * 100);
+    const scorePercent = Math.round((correctCount / totalCount) * 100);
     return (
       <div className="min-h-[calc(100vh-49px)] flex items-center justify-center bg-gray-50 px-4">
         <div className="w-full max-w-sm bg-white rounded-xl shadow p-8 text-center animate-pop">
@@ -187,7 +208,7 @@ export default function PracticePage() {
               scorePercent >= 70 ? "text-green-600" : scorePercent >= 40 ? "text-yellow-600" : "text-red-600"
             }`}
           >
-            {correctCount} / {questions.length}
+            {correctCount} / {totalCount}
           </p>
           <p className="text-gray-500 mb-6">{scorePercent}% correct</p>
           <button
@@ -202,7 +223,7 @@ export default function PracticePage() {
     );
   }
 
-  const progressPercent = ((currentIndex + (result ? 1 : 0)) / questions.length) * 100;
+  const progressPercent = totalCount ? ((currentPosition - 1 + (result ? 1 : 0)) / totalCount) * 100 : 0;
 
   return (
     <div className="min-h-[calc(100vh-49px)] bg-gray-50 px-4 py-10">
@@ -212,7 +233,7 @@ export default function PracticePage() {
             <span className="mr-2 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-gray-500">
               {activeDomainLabel}
             </span>
-            Question {currentIndex + 1} of {questions.length}
+            Question {currentPosition} of {totalCount}
           </span>
           <span className="rounded-full bg-indigo-50 px-2.5 py-0.5 font-medium text-indigo-700">
             Score: {correctCount}
@@ -226,12 +247,21 @@ export default function PracticePage() {
           />
         </div>
 
-        <div key={currentIndex} className="animate-fade-in">
+        {skippedIds.size > 0 && (
+          <p className="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800 animate-fade-in">
+            {skippedIds.size} question{skippedIds.size === 1 ? "" : "s"} skipped — you&apos;ll get{" "}
+            {skippedIds.size === 1 ? "it" : "them"} again before this session ends.
+          </p>
+        )}
+
+        <div key={currentQuestion?.id} className="animate-fade-in">
           <QuestionCard
             question={currentQuestion}
             selectedOptionId={selectedOptionId}
             onSelectOption={handleSelectOption}
             onSubmit={handleSubmit}
+            onSkip={handleSkip}
+            canSkip={queue.length > 1}
             isAnswered={Boolean(result)}
             isSubmitting={isSubmitting}
             correctOptionId={result?.correctOptionId}
