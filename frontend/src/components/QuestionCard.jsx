@@ -10,12 +10,16 @@ export default function QuestionCard({
   question,
   selectedOptionId,
   onSelectOption,
+  onSubmit,
+  onSkip,
+  canSkip,
   isAnswered,
+  isSubmitting,
   correctOptionId,
 }) {
   if (!question) return null;
 
-  const domainColor = getDomainColor(question.domain);
+  const domainColor = getDomainColor(question.domain?.name);
 
   return (
     <div className="bg-white rounded-xl shadow p-6">
@@ -23,7 +27,7 @@ export default function QuestionCard({
         <span
           className={`inline-block rounded-full px-3 py-1 text-xs font-medium ${domainColor.bg} ${domainColor.text}`}
         >
-          {question.domain}
+          {question.domain?.name}
         </span>
         <span
           className={`rounded-full px-2.5 py-0.5 text-xs font-medium uppercase tracking-wide ${
@@ -49,7 +53,7 @@ export default function QuestionCard({
               disabled={isAnswered}
               onClick={() => onSelectOption(option.id)}
               className={[
-                "w-full text-left rounded-lg border px-4 py-3 text-sm transition-all",
+                "flex w-full items-center justify-between gap-3 rounded-lg border px-4 py-3 text-left text-sm transition-all",
                 isCorrectOption
                   ? "border-green-500 bg-green-50 text-green-800 animate-pop"
                   : isWrongSelection
@@ -60,11 +64,44 @@ export default function QuestionCard({
                 isAnswered ? "cursor-default" : "cursor-pointer active:scale-[0.99]",
               ].join(" ")}
             >
-              {option.text}
+              <span>{option.text}</span>
+              {isCorrectOption && (
+                <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5 shrink-0 text-blue-600">
+                  <path
+                    fillRule="evenodd"
+                    d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+              )}
             </button>
           );
         })}
       </div>
+
+      {!isAnswered && (
+        <div className="mt-4 flex gap-3">
+          {canSkip && (
+            <button
+              type="button"
+              onClick={onSkip}
+              disabled={isSubmitting}
+              title="Come back to this question after the others"
+              className="rounded-md border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 transition-all hover:bg-gray-50 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Skip for now
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onSubmit}
+            disabled={!selectedOptionId || isSubmitting}
+            className="flex-1 rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white transition-all hover:bg-indigo-500 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isSubmitting ? "Submitting…" : "Submit answer"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
