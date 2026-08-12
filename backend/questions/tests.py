@@ -38,13 +38,23 @@ class QuestionDeliveryTests(APITestCase):
         AnswerOption.objects.create(question=other_question, text="A", is_correct=True)
         AnswerOption.objects.create(question=other_question, text="B", is_correct=False)
 
-        response = self.client.get(f"/api/questions/?domain={self.domain.id}")
+        response = self.client.get(f"/api/questions/?domains={self.domain.id}")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.data["questions"]), 1)
         self.assertEqual(response.data["questions"][0]["id"], self.question.id)
 
-    def test_question_list_rejects_non_integer_domain(self):
-        response = self.client.get("/api/questions/?domain=abc")
+    def test_question_list_filters_by_multiple_domains(self):
+        other_domain = Domain.objects.create(name="Static Testing")
+        other_question = Question.objects.create(domain=other_domain, text="Static testing Q")
+        AnswerOption.objects.create(question=other_question, text="A", is_correct=True)
+        AnswerOption.objects.create(question=other_question, text="B", is_correct=False)
+
+        response = self.client.get(f"/api/questions/?domains={self.domain.id},{other_domain.id}&count=10")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data["questions"]), 2)
+
+    def test_question_list_rejects_non_integer_domains(self):
+        response = self.client.get("/api/questions/?domains=abc")
         self.assertEqual(response.status_code, 400)
 
     def test_answer_submit_correct(self):
@@ -148,9 +158,12 @@ class AdminQuestionCrudTests(APITestCase):
 
 
 class DomainListTests(APITestCase):
-    def test_domain_list_requires_auth(self):
+    def test_domain_list_is_public(self):
+        Domain.objects.create(name="Static Testing")
         response = self.client.get("/api/questions/domains/")
-        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]["name"], "Static Testing")
 
     def test_domain_list_returns_domains(self):
         user = User.objects.create_user(username="student4", email="student4@gmail.com", password="Str0ngPass!23")

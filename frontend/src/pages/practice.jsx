@@ -1,19 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import { useAuth } from "../context/AuthContext";
 import { fetchDomains, fetchPracticeQuestions, submitAnswer } from "../services/questionsService";
-import { getDomainColor } from "../utils/domainColors";
 import QuestionCard from "../components/QuestionCard";
 import FeedbackPanel from "../components/FeedbackPanel";
 
-const DOMAINS = [
-  { name: "Fundamentals of Testing", icon: "🧩", blurb: "Core testing principles" },
-  { name: "Testing Throughout the SDLC", icon: "🔄", blurb: "Testing across the lifecycle" },
-  { name: "Static Testing", icon: "🔍", blurb: "Reviews without execution" },
-  { name: "Test Analysis and Design", icon: "🧠", blurb: "Designing test cases" },
-  { name: "Managing the Test Activities", icon: "🗂️", blurb: "Planning & control" },
-  { name: "Test Tools", icon: "🛠️", blurb: "Tooling & automation" },
-];
+const DOMAIN_ICONS = ["🧩", "🔄", "🔍", "🧠", "🗂️", "🛠️"];
 
 const SESSION_LENGTHS = [
   { value: 10, label: "Quick", minutes: "~10 min" },
@@ -25,40 +17,55 @@ export default function PracticePage() {
   const router = useRouter();
   const { user, isLoading: isAuthLoading } = useAuth();
 
+  const [domains, setDomains] = useState([]);
   const [sessionStarted, setSessionStarted] = useState(false);
-  const [selectedDomains, setSelectedDomains] = useState([]);
+  const [selectedDomainIds, setSelectedDomainIds] = useState([]);
   const [sessionLength, setSessionLength] = useState(10);
 
-  const [questions, setQuestions] = useState([]);
+  // `queue` holds the questions still owed an answer, in the order they'll be
+  // shown. Skipping a question moves it from the front to the back instead
+  // of removing it, so it comes back around later in the same session.
+  const [queue, setQueue] = useState([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [skippedIds, setSkippedIds] = useState(() => new Set());
   const [sessionId, setSessionId] = useState(null);
   const [selectedOptionId, setSelectedOptionId] = useState(null);
   const [result, setResult] = useState(null);
   const [correctCount, setCorrectCount] = useState(0);
   const [isLoadingQuestions, setIsLoadingQuestions] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [isSessionComplete, setIsSessionComplete] = useState(false);
 
-  function toggleDomain(domainName) {
-    setSelectedDomains((prev) =>
-      prev.includes(domainName) ? prev.filter((d) => d !== domainName) : [...prev, domainName]
+  // Domains are public, so even guests browsing before login see real names.
+  useEffect(() => {
+    fetchDomains()
+      .then(setDomains)
+      .catch(() => {});
+  }, []);
+
+  function toggleDomain(domainId) {
+    setSelectedDomainIds((prev) =>
+      prev.includes(domainId) ? prev.filter((id) => id !== domainId) : [...prev, domainId]
     );
   }
 
   async function startSession() {
-    // Only gate here -- guests can browse the setup screen freely,
-    // but need an account to actually start practicing.
+    // Guests can browse this setup screen freely, but need an account to
+    // actually start practicing.
     if (!user) {
       router.push("/login");
       return;
     }
 
-    setIsLoadingQuestions(true);
     setLoadError("");
+    setIsLoadingQuestions(true);
     try {
-      const data = await fetchPracticeQuestions(sessionLength, selectedDomains);
-      setQuestions(data.questions);
+      const data = await fetchPracticeQuestions(sessionLength, selectedDomainIds);
+      setQueue(data.questions);
+      setTotalCount(data.questions.length);
+      setSkippedIds(new Set());
       setSessionId(data.session_id);
-      setCurrentIndex(0);
       setSelectedOptionId(null);
       setResult(null);
       setCorrectCount(0);
@@ -71,30 +78,8 @@ export default function PracticePage() {
     }
   }
 
-  async function startSession(domainId) {
-    setSelectedDomainId(domainId);
-    setLoadError("");
-    setIsLoadingQuestions(true);
-    try {
-      const data = await fetchPracticeQuestions(SESSION_SIZE, domainId);
-      setQueue(data.questions);
-      setTotalCount(data.questions.length);
-      setSkippedIds(new Set());
-      setSessionId(data.session_id);
-      setSelectedOptionId(null);
-      setResult(null);
-      setCorrectCount(0);
-      setIsSessionComplete(false);
-      setIsSettingUp(false);
-    } catch {
-      setLoadError("Couldn't load practice questions for that domain. Please try again.");
-    } finally {
-      setIsLoadingQuestions(false);
-    }
-  }
-
   function backToSetup() {
-    setIsSettingUp(true);
+    setSessionStarted(false);
     setQueue([]);
     setIsSessionComplete(false);
     setLoadError("");
@@ -103,9 +88,6 @@ export default function PracticePage() {
   const currentQuestion = queue[0];
   const isLastQuestion = queue.length === 1;
   const currentPosition = totalCount - queue.length + 1;
-  const activeDomainLabel = selectedDomainId
-    ? (domains.find((d) => d.id === selectedDomainId)?.name ?? "Domain")
-    : "All Domains";
 
   function handleSelectOption(optionId) {
     if (result) return;
@@ -171,33 +153,25 @@ export default function PracticePage() {
             <h1 className="text-2xl font-semibold text-gray-900">Start a practice session</h1>
             {!user && (
               <p className="mt-1 text-sm text-gray-500">
-                Browse the options below freely — you'll only need an account once
-                you're ready to answer questions.
+                Browse the options below freely — you&apos;ll only need an account once you&apos;re ready to
+                answer questions.
               </p>
             )}
           </div>
 
           {!user && (
             <div className="rounded-xl border border-indigo-100 bg-indigo-50 p-5">
-              <h2 className="text-sm font-semibold text-indigo-900">
-                What's in a practice session?
-              </h2>
+              <h2 className="text-sm font-semibold text-indigo-900">What&apos;s in a practice session?</h2>
               <ul className="mt-3 space-y-2 text-sm text-indigo-800 list-disc list-inside">
+                <li>Real exam-style multiple choice questions across all 6 CTFL v4.0 knowledge domains.</li>
+                <li>Instant feedback on every answer — see the correct option highlighted right away.</li>
                 <li>
-                  Real exam-style multiple choice questions across all 6 CTFL v4.0
-                  knowledge domains.
+                  AI-generated explanations for why an answer is right or wrong, tied back to the specific
+                  concept being tested.
                 </li>
                 <li>
-                  Instant feedback on every answer — see the correct option
-                  highlighted right away.
-                </li>
-                <li>
-                  AI-generated explanations for why an answer is right or wrong,
-                  tied back to the specific concept being tested.
-                </li>
-                <li>
-                  Every attempt feeds your analytics dashboard, so you can see
-                  exactly which domains need more work.
+                  Every attempt feeds your analytics dashboard, so you can see exactly which domains need
+                  more work.
                 </li>
               </ul>
             </div>
@@ -206,20 +180,16 @@ export default function PracticePage() {
           {loadError && <p className="text-sm text-red-600 animate-fade-in">{loadError}</p>}
 
           <div>
-            <h2 className="mb-1 text-sm font-medium text-gray-700">
-              Filter by domain
-            </h2>
-            <p className="mb-3 text-xs text-gray-400">
-              Optional — leave all unselected to practice every domain.
-            </p>
+            <h2 className="mb-1 text-sm font-medium text-gray-700">Filter by domain</h2>
+            <p className="mb-3 text-xs text-gray-400">Optional — leave all unselected to practice every domain.</p>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {DOMAINS.map((domain) => {
-                const isSelected = selectedDomains.includes(domain.name);
+              {domains.map((domain, index) => {
+                const isSelected = selectedDomainIds.includes(domain.id);
                 return (
                   <button
-                    key={domain.name}
+                    key={domain.id}
                     type="button"
-                    onClick={() => toggleDomain(domain.name)}
+                    onClick={() => toggleDomain(domain.id)}
                     aria-pressed={isSelected}
                     className={`group flex items-center gap-3 rounded-xl border-2 p-4 text-left transition-all active:scale-[0.98] ${
                       isSelected
@@ -232,7 +202,7 @@ export default function PracticePage() {
                         isSelected ? "bg-indigo-600" : "bg-gray-100"
                       }`}
                     >
-                      {domain.icon}
+                      {DOMAIN_ICONS[index % DOMAIN_ICONS.length]}
                     </span>
                     <span className="min-w-0">
                       <span
@@ -241,9 +211,6 @@ export default function PracticePage() {
                         }`}
                       >
                         {domain.name}
-                      </span>
-                      <span className="block truncate text-xs text-gray-500">
-                        {domain.blurb}
                       </span>
                     </span>
                     {isSelected && (
@@ -284,9 +251,7 @@ export default function PracticePage() {
                     <span className="mt-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
                       {option.label}
                     </span>
-                    <span className="mt-0.5 block text-xs text-gray-400">
-                      {option.minutes}
-                    </span>
+                    <span className="mt-0.5 block text-xs text-gray-400">{option.minutes}</span>
                   </button>
                 );
               })}
@@ -299,10 +264,11 @@ export default function PracticePage() {
                 📝
               </span>
               <span>
-                <span className="font-semibold text-gray-900">{sessionLength} questions</span>{" "}
-                from{" "}
+                <span className="font-semibold text-gray-900">{sessionLength} questions</span> from{" "}
                 <span className="font-semibold text-gray-900">
-                  {selectedDomains.length === 0 ? "all domains" : `${selectedDomains.length} domain${selectedDomains.length > 1 ? "s" : ""}`}
+                  {selectedDomainIds.length === 0
+                    ? "all domains"
+                    : `${selectedDomainIds.length} domain${selectedDomainIds.length > 1 ? "s" : ""}`}
                 </span>
               </span>
             </div>
@@ -314,11 +280,7 @@ export default function PracticePage() {
             disabled={isLoadingQuestions}
             className="w-full rounded-md bg-indigo-600 py-3 text-sm font-semibold text-white transition-all hover:bg-indigo-500 active:scale-[0.98] disabled:opacity-50"
           >
-            {isLoadingQuestions
-              ? "Loading questions…"
-              : user
-              ? "Start session"
-              : "Log in to start"}
+            {isLoadingQuestions ? "Loading questions…" : user ? "Start session" : "Log in to start"}
           </button>
         </div>
       </div>
@@ -341,7 +303,7 @@ export default function PracticePage() {
           <p className="text-gray-500 mb-6">{scorePercent}% correct</p>
           <button
             type="button"
-            onClick={() => setSessionStarted(false)}
+            onClick={backToSetup}
             className="w-full rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white transition-all hover:bg-indigo-500 active:scale-[0.98]"
           >
             Start another session
@@ -358,9 +320,6 @@ export default function PracticePage() {
       <div className="mx-auto max-w-2xl">
         <div className="mb-2 flex items-center justify-between text-sm text-gray-500">
           <span>
-            <span className="mr-2 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-gray-500">
-              {activeDomainLabel}
-            </span>
             Question {currentPosition} of {totalCount}
           </span>
           <span className="rounded-full bg-indigo-50 px-2.5 py-0.5 font-medium text-indigo-700">

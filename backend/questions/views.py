@@ -48,13 +48,16 @@ class QuestionListView(APIView):
 
         questions_qs = Question.objects.filter(is_active=True).select_related("domain").prefetch_related("options")
 
-        domain_param = request.query_params.get("domain")
-        if domain_param:
+        domains_param = request.query_params.get("domains")
+        if domains_param:
             try:
-                domain_id = int(domain_param)
+                domain_ids = [int(value) for value in domains_param.split(",") if value.strip()]
             except ValueError:
-                return Response({"detail": "domain must be an integer id."}, status=status.HTTP_400_BAD_REQUEST)
-            questions_qs = questions_qs.filter(domain_id=domain_id)
+                return Response(
+                    {"detail": "domains must be a comma-separated list of integer ids."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            questions_qs = questions_qs.filter(domain_id__in=domain_ids)
 
         questions = list(questions_qs.order_by("?")[:count])
         if not questions:
@@ -138,7 +141,8 @@ class AdminQuestionViewSet(viewsets.ModelViewSet):
 
 
 class DomainListView(generics.ListAPIView):
-    """Read-only domain list for populating admin question forms."""
-    permission_classes = [permissions.IsAuthenticated]
+    """Public domain list -- powers the practice setup screen (including
+    guest preview, before login) and the admin question forms."""
+    permission_classes = [permissions.AllowAny]
     queryset = Domain.objects.all().order_by("name")
     serializer_class = DomainSerializer
