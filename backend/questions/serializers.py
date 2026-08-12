@@ -44,7 +44,20 @@ class QuestionAdminSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Question
-        fields = ("id", "domain", "text", "difficulty", "is_active", "options", "created_at")
+        fields = (
+            "id",
+            "domain",
+            "text",
+            "difficulty",
+            "question_type",
+            "cognitive_level",
+            "learning_objective_id",
+            "learning_objective",
+            "source_section",
+            "is_active",
+            "options",
+            "created_at",
+        )
         read_only_fields = ("created_at",)
 
     def validate_options(self, value):
