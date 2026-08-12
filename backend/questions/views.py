@@ -90,6 +90,7 @@ class AnswerSubmitView(APIView):
             {
                 "is_correct": is_correct,
                 "correct_option_id": correct_option.id if correct_option else None,
+                "correct_option_text": correct_option.text if correct_option else None,
             }
         )
 

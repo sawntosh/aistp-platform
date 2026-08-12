@@ -16,6 +16,7 @@ export default function PracticePage() {
   const [result, setResult] = useState(null);
   const [correctCount, setCorrectCount] = useState(0);
   const [isLoadingQuestions, setIsLoadingQuestions] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [isSessionComplete, setIsSessionComplete] = useState(false);
 
@@ -43,14 +44,20 @@ export default function PracticePage() {
   const currentQuestion = questions[currentIndex];
   const isLastQuestion = currentIndex === questions.length - 1;
 
-  async function handleSelectOption(optionId) {
+  function handleSelectOption(optionId) {
     if (result) return;
     setSelectedOptionId(optionId);
+    setLoadError("");
+  }
+
+  async function handleSubmit() {
+    if (!selectedOptionId || result || isSubmitting) return;
+    setIsSubmitting(true);
     try {
       const data = await submitAnswer({
         sessionId,
         questionId: currentQuestion.id,
-        optionId,
+        optionId: selectedOptionId,
       });
       setResult({
         isCorrect: data.is_correct,
@@ -60,7 +67,8 @@ export default function PracticePage() {
       if (data.is_correct) setCorrectCount((c) => c + 1);
     } catch {
       setLoadError("Couldn't submit your answer. Please try again.");
-      setSelectedOptionId(null);
+    } finally {
+      setIsSubmitting(false);
     }
   }
 
@@ -72,6 +80,7 @@ export default function PracticePage() {
     setCurrentIndex((i) => i + 1);
     setSelectedOptionId(null);
     setResult(null);
+    setLoadError("");
   }
 
   if (isAuthLoading || !user) return null;
@@ -144,7 +153,9 @@ export default function PracticePage() {
             question={currentQuestion}
             selectedOptionId={selectedOptionId}
             onSelectOption={handleSelectOption}
+            onSubmit={handleSubmit}
             isAnswered={Boolean(result)}
+            isSubmitting={isSubmitting}
             correctOptionId={result?.correctOptionId}
           />
 

@@ -10,7 +10,7 @@ export async function submitAnswer({ sessionId, questionId, optionId }) {
     body: JSON.stringify({
       session_id: sessionId,
       question_id: questionId,
-      option_id: optionId,
+      selected_option_id: optionId,
     }),
   });
 }
