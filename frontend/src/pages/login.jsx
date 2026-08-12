@@ -46,6 +46,27 @@ export default function LoginPage() {
       <div className="pointer-events-none absolute -left-20 top-16 h-64 w-64 rounded-full bg-rose-300/30 blur-3xl" />
       <div className="pointer-events-none absolute -right-16 bottom-16 h-72 w-72 rounded-full bg-amber-300/40 blur-3xl" />
 
+      <Link
+        href="/"
+        className="absolute top-6 left-6 flex items-center justify-center w-10 h-10 rounded-full bg-white/70 hover:bg-white transition"
+        aria-label="Back to home"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+          <polyline points="9 22 9 12 15 12 15 22" />
+        </svg>
+      </Link>
+
       <div className="relative w-full max-w-sm rounded-[2rem] bg-white p-8 shadow-xl">
         <div className="relative mx-auto mb-4 flex h-20 w-20 items-center justify-center">
           <div className="absolute inset-0 rounded-full bg-gradient-to-br from-amber-300 via-orange-400 to-rose-400 opacity-60 blur-xl" />
