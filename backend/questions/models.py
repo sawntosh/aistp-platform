@@ -25,6 +25,13 @@ class Question(models.Model):
     domain = models.ForeignKey(Domain, on_delete=models.CASCADE, related_name="questions")
     text = models.TextField()
     difficulty = models.CharField(max_length=10, choices=Difficulty.choices, default=Difficulty.MEDIUM)
+    # Optional syllabus metadata carried over from bulk JSON import; left blank
+    # for questions entered by hand via the admin CRUD form.
+    question_type = models.CharField(max_length=50, blank=True, default="")
+    cognitive_level = models.CharField(max_length=10, blank=True, default="")
+    learning_objective_id = models.CharField(max_length=20, blank=True, default="")
+    learning_objective = models.CharField(max_length=255, blank=True, default="")
+    source_section = models.CharField(max_length=255, blank=True, default="")
     is_active = models.BooleanField(default=True)  # FR-06: admin can deactivate
     created_at = models.DateTimeField(auto_now_add=True)
 

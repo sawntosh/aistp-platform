@@ -1,9 +1,14 @@
 """
 questions/views.py -- FR-02 (Question Delivery), FR-03 (Scoring),
-FR-07 (weighted domain delivery), FR-06 (Admin CRUD).
+FR-07 (weighted domain delivery), FR-06 (Admin CRUD + JSON import).
 """
+import json
+
+from django.db import transaction
 from django.shortcuts import get_object_or_404
-from rest_framework import permissions, status, viewsets
+from rest_framework import generics, permissions, status, viewsets
+from rest_framework.decorators import action
+from rest_framework.parsers import JSONParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -11,9 +16,11 @@ from accounts.permissions import IsAdminRole
 from services.analytics_service import record_attempt
 from services.scoring_service import score_answer
 
-from .models import AnswerOption, Attempt, PracticeSession, Question
+from .imports import import_questions, validate_rows
+from .models import AnswerOption, Attempt, Domain, PracticeSession, Question
 from .serializers import (
     AnswerSubmitSerializer,
+    DomainSerializer,
     QuestionAdminSerializer,
     QuestionPublicSerializer,
 )
@@ -92,3 +99,38 @@ class AdminQuestionViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated, IsAdminRole]
     queryset = Question.objects.all().select_related("domain").prefetch_related("options")
     serializer_class = QuestionAdminSerializer
+
+    @action(detail=False, methods=["post"], url_path="import", parser_classes=[MultiPartParser, JSONParser])
+    def import_from_json(self, request):
+        """Bulk-create questions from a JSON file upload (field name 'file')
+        or a raw JSON array body -- see questions/imports.py for the row
+        format. Validation is all-or-nothing: a bad row rejects the whole
+        batch instead of partially importing it."""
+        uploaded_file = request.FILES.get("file")
+        if uploaded_file is not None:
+            try:
+                rows = json.loads(uploaded_file.read().decode("utf-8"))
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                return Response({"detail": "Uploaded file is not valid JSON."}, status=status.HTTP_400_BAD_REQUEST)
+        elif isinstance(request.data, list):
+            rows = request.data
+        else:
+            return Response(
+                {"detail": "Provide a JSON file under 'file' or a raw JSON array body."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        cleaned_rows, errors = validate_rows(rows)
+        if errors:
+            return Response({"errors": errors}, status=status.HTTP_400_BAD_REQUEST)
+
+        with transaction.atomic():
+            summary = import_questions(cleaned_rows)
+        return Response(summary, status=status.HTTP_201_CREATED)
+
+
+class DomainListView(generics.ListAPIView):
+    """Read-only domain list for populating admin question forms."""
+    permission_classes = [permissions.IsAuthenticated]
+    queryset = Domain.objects.all().order_by("name")
+    serializer_class = DomainSerializer

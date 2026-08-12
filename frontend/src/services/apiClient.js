@@ -36,8 +36,11 @@ export function setUnauthorizedHandler(handler) {
 }
 
 async function rawRequest(path, options) {
+  // Skip the default JSON header for FormData bodies (file uploads) so the
+  // browser can set its own multipart Content-Type with the boundary.
+  const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
   const headers = {
-    "Content-Type": "application/json",
+    ...(isFormData ? {} : { "Content-Type": "application/json" }),
     ...(inMemoryToken ? { Authorization: `Bearer ${inMemoryToken}` } : {}),
     ...options.headers,
   };
