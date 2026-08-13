@@ -69,8 +69,11 @@ GEMINI_API_KEY=your-gemini-api-key
 Run it:
 ```bash
 python manage.py migrate
+python manage.py seed_questions   # loads the bundled question bank (skips if already seeded)
 python manage.py runserver
 ```
+
+> `seed_questions` loads `backend/questions/fixtures/seed_questions.json` (the full ISTQB CTFL v4.0 question bank, versioned in git) into whatever database `DATABASE_URL` points to. Run it once per fresh database — every clone/teammate ends up with the same questions instead of relying on someone's local `db.sqlite3`, which is gitignored and never shared. Pass `--force` to re-import on top of existing data.
 
 ### Frontend
 
