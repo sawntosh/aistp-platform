@@ -173,6 +173,9 @@ export default function PracticePage() {
       <div className="min-h-[calc(100vh-49px)] bg-gray-50 px-4 py-10">
         <div className="mx-auto max-w-2xl space-y-8">
           <div>
+            {user && (
+              <p className="mb-1 text-sm font-medium text-indigo-600">Welcome back, {user.username}</p>
+            )}
             <h1 className="text-2xl font-semibold text-gray-900">Start a practice session</h1>
             {!user && (
               <p className="mt-1 text-sm text-gray-500">
