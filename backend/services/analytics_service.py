@@ -17,9 +17,19 @@ def record_attempt(user, domain, is_correct):
 
 def get_domain_accuracy(user):
     """Return per-domain accuracy dicts for the given user, reading from
-    analytics.models.PerformanceAnalytics."""
-    raise NotImplementedError
+    analytics.models.PerformanceAnalytics. Sorted weakest domain first."""
+    records = PerformanceAnalytics.objects.filter(user=user).select_related("domain")
+    domains = [
+        {
+            "domain": record.domain.name,
+            "correct_count": record.correct_count,
+            "total_count": record.total_count,
+            "accuracy_percent": record.accuracy_percent,
+        }
+        for record in records
+    ]
+    return sorted(domains, key=lambda d: d["accuracy_percent"])
 
 
 def get_weakest_domains(user, limit=2):
-    raise NotImplementedError
+    return get_domain_accuracy(user)[:limit]

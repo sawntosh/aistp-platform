@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import { useAuth } from "../context/AuthContext";
-import { fetchDomains, fetchPracticeQuestions, submitAnswer } from "../services/questionsService";
+import { fetchDomains, fetchPracticeQuestions, finishSession, submitAnswer } from "../services/questionsService";
 import QuestionCard from "../components/QuestionCard";
 import FeedbackPanel from "../components/FeedbackPanel";
 
@@ -135,6 +135,10 @@ export default function PracticePage() {
     });
     setQueue((q) => q.slice(1));
     if (remaining <= 0) {
+      // Best-effort: the session summary below is computed from local state
+      // regardless, so a failed finish call shouldn't block the user here --
+      // it just means this session won't show as "Completed" on analytics.
+      finishSession(sessionId).catch(() => {});
       setIsSessionComplete(true);
       return;
     }
