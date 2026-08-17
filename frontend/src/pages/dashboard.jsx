@@ -4,8 +4,8 @@ import Link from "next/link";
 import { useAuth } from "../context/AuthContext";
 import { fetchDashboardAnalytics } from "../services/analyticsService";
 import { useCountUp } from "../hooks/useCountUp";
-import DomainAccuracyChart from "../components/DomainAccuracyChart";
-import ScoreTrendChart from "../components/ScoreTrendChart";
+import AccuracyRing from "../components/AccuracyRing";
+import DomainAccuracyBars from "../components/DomainAccuracyBars";
 import AttemptHistoryTable from "../components/AttemptHistoryTable";
 
 const RANGE_OPTIONS = [
@@ -14,6 +14,33 @@ const RANGE_OPTIONS = [
   { label: "All time", value: null },
 ];
 
+function weightedAccuracy(sessions) {
+  const totalQuestions = sessions.reduce((sum, s) => sum + s.question_count, 0);
+  if (!totalQuestions) return 0;
+  const totalScore = sessions.reduce((sum, s) => sum + (s.score ?? 0), 0);
+  return Math.round((totalScore / totalQuestions) * 1000) / 10;
+}
+
+function computeStreak(sessions) {
+  const days = new Set(sessions.filter((s) => s.finished_at).map((s) => new Date(s.finished_at).toDateString()));
+  if (!days.size) return 0;
+
+  const cursor = new Date();
+  cursor.setHours(0, 0, 0, 0);
+
+  if (!days.has(cursor.toDateString())) {
+    cursor.setDate(cursor.getDate() - 1);
+    if (!days.has(cursor.toDateString())) return 0;
+  }
+
+  let streak = 0;
+  while (days.has(cursor.toDateString())) {
+    streak += 1;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  return streak;
+}
+
 export default function DashboardPage() {
   const router = useRouter();
   const { user, isLoading: isAuthLoading } = useAuth();
@@ -21,7 +48,7 @@ export default function DashboardPage() {
   const [data, setData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
-  const [sessionLimit, setSessionLimit] = useState(null);
+  const [sessionLimit, setSessionLimit] = useState(10);
 
   useEffect(() => {
     if (!isAuthLoading && !user) {
@@ -44,13 +71,30 @@ export default function DashboardPage() {
 
   const domains = data?.domains ?? [];
   const sessions = data?.sessions ?? [];
-  const completedCount = sessions.filter((s) => s.finished_at).length;
-  const weakestDomain = domains.length
-    ? [...domains].sort((a, b) => a.accuracy_percent - b.accuracy_percent)[0]
-    : null;
 
-  const animatedAccuracy = useCountUp(data?.overall_accuracy ?? 0);
-  const animatedSessions = useCountUp(completedCount);
+  const completedSessions = sessions.filter((s) => s.finished_at);
+  const sortedCompletedDesc = [...completedSessions].sort(
+    (a, b) => new Date(b.started_at) - new Date(a.started_at)
+  );
+  const sortedAllDesc = [...sessions].sort((a, b) => new Date(b.started_at) - new Date(a.started_at));
+
+  const currentWindow = sessionLimit ? sortedCompletedDesc.slice(0, sessionLimit) : sortedCompletedDesc;
+  const previousWindow = sessionLimit
+    ? sortedCompletedDesc.slice(sessionLimit, sessionLimit * 2)
+    : [];
+
+  const rangeAccuracy = sessionLimit ? weightedAccuracy(currentWindow) : data?.overall_accuracy ?? 0;
+  const previousRangeAccuracy = previousWindow.length ? weightedAccuracy(previousWindow) : null;
+  const delta = previousRangeAccuracy !== null ? Math.round(rangeAccuracy - previousRangeAccuracy) : null;
+
+  const questionsAnswered = completedSessions.reduce((sum, s) => sum + s.question_count, 0);
+  const streak = computeStreak(sessions);
+
+  const filteredSessions = sessionLimit ? sortedAllDesc.slice(0, sessionLimit) : sortedAllDesc;
+
+  const animatedAccuracy = useCountUp(rangeAccuracy);
+  const animatedSessions = useCountUp(completedSessions.length);
+  const animatedQuestions = useCountUp(questionsAnswered);
 
   if (isAuthLoading || !user) return null;
 
@@ -69,9 +113,6 @@ export default function DashboardPage() {
       </div>
     );
   }
-
-  const sortedByDate = [...sessions].sort((a, b) => new Date(b.started_at) - new Date(a.started_at));
-  const filteredSessions = sessionLimit ? sortedByDate.slice(0, sessionLimit) : sessions;
 
   return (
     <div className="relative min-h-[calc(100vh-49px)] bg-gray-50 px-4 py-10">
@@ -96,61 +137,25 @@ export default function DashboardPage() {
       </Link>
 
       <div className="mx-auto max-w-5xl">
-        <h1 className="text-2xl font-semibold text-gray-900 mb-1">Your analytics</h1>
-        <p className="text-sm text-gray-500 mb-6">
-          Accuracy by domain and your practice session history.
-        </p>
+        <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">
+              CTFL Practice &middot; Performance
+            </p>
+            <h1 className="mt-1 font-serif text-3xl text-gray-900">Your readiness report</h1>
+            <p className="mt-1 text-sm text-gray-500">
+              Updated moments ago &middot; based on {completedSessions.length} completed session
+              {completedSessions.length === 1 ? "" : "s"}
+            </p>
+          </div>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 mb-6">
-          <div className="flex items-start gap-3 rounded-xl bg-white p-5 shadow transition-shadow hover:shadow-md">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-violet-500 text-lg">
-              🎯
-            </span>
-            <div>
-              <p className="text-xs uppercase tracking-wide text-gray-400">Overall accuracy</p>
-              <p className="mt-1 text-3xl font-semibold tabular-nums text-gray-900">
-                {Math.round(animatedAccuracy)}%
-              </p>
-            </div>
-          </div>
-          <div className="flex items-start gap-3 rounded-xl bg-white p-5 shadow transition-shadow hover:shadow-md">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-teal-500 text-lg">
-              ✅
-            </span>
-            <div>
-              <p className="text-xs uppercase tracking-wide text-gray-400">Sessions completed</p>
-              <p className="mt-1 text-3xl font-semibold tabular-nums text-gray-900">
-                {Math.round(animatedSessions)}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-start gap-3 rounded-xl bg-white p-5 shadow transition-shadow hover:shadow-md">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-amber-500 to-rose-500 text-lg">
-              ⚡
-            </span>
-            <div>
-              <p className="text-xs uppercase tracking-wide text-gray-400">Weakest domain</p>
-              <p className="mt-1 text-lg font-semibold text-gray-900 truncate">
-                {weakestDomain ? weakestDomain.domain : "—"}
-              </p>
-              {weakestDomain && (
-                <p className="text-sm text-gray-500">{weakestDomain.accuracy_percent}% accuracy</p>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div className="mb-4 flex items-center justify-end gap-1">
-          <span className="mr-1 text-xs font-medium uppercase tracking-wide text-gray-400">
-            Session range
-          </span>
           <div className="inline-flex rounded-md bg-gray-100 p-0.5">
             {RANGE_OPTIONS.map((option) => (
               <button
                 key={option.label}
                 type="button"
                 onClick={() => setSessionLimit(option.value)}
-                className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${
+                className={`rounded px-3 py-1.5 text-sm font-medium transition-colors ${
                   sessionLimit === option.value
                     ? "bg-white text-indigo-700 shadow-sm"
                     : "text-gray-500 hover:text-gray-900"
@@ -162,19 +167,60 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 mb-6">
-          <div className="rounded-xl bg-white p-6 shadow">
-            <h2 className="text-sm font-semibold text-gray-900 mb-4">Accuracy by domain</h2>
-            <DomainAccuracyChart domains={domains} />
-          </div>
-          <div className="rounded-xl bg-white p-6 shadow">
-            <h2 className="text-sm font-semibold text-gray-900 mb-4">Accuracy trend</h2>
-            <ScoreTrendChart sessions={filteredSessions} />
+        <div className="mb-6 rounded-2xl border border-gray-100 bg-white p-8 shadow-sm">
+          <div className="grid grid-cols-1 gap-8 sm:grid-cols-2">
+            <div className="flex items-center gap-6">
+              <AccuracyRing percent={animatedAccuracy} />
+              <div>
+                <p className="text-sm text-gray-500">Overall accuracy, all domains</p>
+                {delta !== null && (
+                  <p
+                    className={`mt-2 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${
+                      delta >= 0 ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"
+                    }`}
+                  >
+                    {delta >= 0 ? "↑" : "↓"} {Math.abs(delta)} pts vs. previous {sessionLimit} sessions
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="divide-y divide-gray-100 sm:border-l sm:border-gray-100 sm:pl-8">
+              <div className="flex items-center justify-between py-2.5">
+                <span className="text-sm text-gray-500">Sessions completed</span>
+                <span className="text-lg font-semibold tabular-nums text-gray-900">
+                  {Math.round(animatedSessions)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between py-2.5">
+                <span className="text-sm text-gray-500">Questions answered</span>
+                <span className="text-lg font-semibold tabular-nums text-gray-900">
+                  {Math.round(animatedQuestions)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between py-2.5">
+                <span className="text-sm text-gray-500">Current streak</span>
+                <span className="text-lg font-semibold tabular-nums text-gray-900">
+                  {streak} <span className="text-sm font-normal text-gray-400">days</span>
+                </span>
+              </div>
+            </div>
           </div>
         </div>
 
-        <div className="rounded-xl bg-white shadow overflow-hidden">
-          <h2 className="text-sm font-semibold text-gray-900 px-6 pt-6 pb-4">Session history</h2>
+        <div className="mb-6 rounded-xl bg-white p-6 shadow-sm">
+          <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="font-serif text-xl text-gray-900">Accuracy by domain</h2>
+            <p className="text-xs text-gray-400">Ranked weakest first &middot; 60% is the practice threshold</p>
+          </div>
+          <DomainAccuracyBars domains={domains} />
+        </div>
+
+        <div className="rounded-xl bg-white shadow-sm overflow-hidden">
+          <div className="flex items-center justify-between px-6 pt-6 pb-4">
+            <h2 className="font-serif text-xl text-gray-900">Session history</h2>
+            <p className="text-xs text-gray-400">Click a column to sort</p>
+          </div>
           <AttemptHistoryTable sessions={filteredSessions} />
         </div>
       </div>
