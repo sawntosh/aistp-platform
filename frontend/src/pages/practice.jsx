@@ -4,6 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import { fetchDomains, fetchPracticeQuestions, finishSession, submitAnswer } from "../services/questionsService";
 import QuestionCard from "../components/QuestionCard";
 import FeedbackPanel from "../components/FeedbackPanel";
+import ConfirmModal from "../components/ConfirmModal";
 
 const DOMAIN_ICONS = ["🧩", "🔄", "🔍", "🧠", "🗂️", "🛠️"];
 
@@ -16,6 +17,7 @@ const SESSION_LENGTHS = [
 export default function PracticePage() {
   const router = useRouter();
   const { user, isLoading: isAuthLoading } = useAuth();
+  const { setIsActive: setSessionLocked } = usePracticeSession();
 
   const [domains, setDomains] = useState([]);
   const [sessionStarted, setSessionStarted] = useState(false);
@@ -36,6 +38,7 @@ export default function PracticePage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [isSessionComplete, setIsSessionComplete] = useState(false);
+  const [showEndConfirm, setShowEndConfirm] = useState(false);
 
   // Domains are public, so even guests browsing before login see real names.
   useEffect(() => {
@@ -43,6 +46,14 @@ export default function PracticePage() {
       .then(setDomains)
       .catch(() => {});
   }, []);
+
+  // Lock the rest of the app's navigation while a session has questions left
+  // to answer, so a stray click can't abandon it without going through the
+  // end-practice confirmation.
+  useEffect(() => {
+    setSessionLocked(sessionStarted && !isSessionComplete);
+  }, [sessionStarted, isSessionComplete, setSessionLocked]);
+  useEffect(() => () => setSessionLocked(false), [setSessionLocked]);
 
   function toggleDomain(domainId) {
     setSelectedDomainIds((prev) =>
@@ -145,6 +156,16 @@ export default function PracticePage() {
     setSelectedOptionId(null);
     setResult(null);
     setLoadError("");
+  }
+
+  async function handleEndPractice() {
+    setShowEndConfirm(false);
+    try {
+      await finishSession(sessionId);
+    } catch {
+      // Best-effort -- the session still ends locally even if this fails.
+    }
+    setIsSessionComplete(true);
   }
 
   if (isAuthLoading) return null;
@@ -326,9 +347,18 @@ export default function PracticePage() {
           <span>
             Question {currentPosition} of {totalCount}
           </span>
-          <span className="rounded-full bg-indigo-50 px-2.5 py-0.5 font-medium text-indigo-700">
-            Score: {correctCount}
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="rounded-full bg-indigo-50 px-2.5 py-0.5 font-medium text-indigo-700">
+              Score: {correctCount}
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowEndConfirm(true)}
+              className="rounded-full border border-gray-200 px-2.5 py-0.5 text-xs font-medium text-gray-500 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-600 active:scale-95"
+            >
+              End practice
+            </button>
+          </div>
         </div>
 
         <div className="mb-6 h-1.5 w-full overflow-hidden rounded-full bg-gray-200">
@@ -371,6 +401,16 @@ export default function PracticePage() {
 
         {loadError && <p className="mt-4 text-sm text-red-600 animate-fade-in">{loadError}</p>}
       </div>
+
+      <ConfirmModal
+        open={showEndConfirm}
+        title="Do you want to end the practice session?"
+        message="Your progress so far will be saved, but you won't be able to resume these remaining questions."
+        confirmLabel="End session"
+        cancelLabel="Keep practicing"
+        onConfirm={handleEndPractice}
+        onCancel={() => setShowEndConfirm(false)}
+      />
     </div>
   );
 }

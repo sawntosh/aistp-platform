@@ -35,8 +35,8 @@ class QuestionListView(APIView):
     PracticeSession that subsequent AnswerSubmitView calls attach to.
 
     Weighted delivery towards the learner's weakest domains (FR-07) is
-    intentionally not implemented here yet -- it depends on
-    services.analytics_service.get_weakest_domains, which is still a stub.
+    intentionally not implemented here yet, though
+    services.analytics_service.get_weakest_domains is now available for it.
     """
     permission_classes = [permissions.IsAuthenticated]
 
