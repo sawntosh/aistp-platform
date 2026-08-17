@@ -2,7 +2,7 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 import { useAuth } from "../context/AuthContext";
 import { usePracticeSession } from "../context/PracticeSessionContext";
-import UserAvatar from "./UserAvatar";
+import UserMenu from "./UserMenu";
 
 const LINKS = [
   { href: "/practice", label: "Practice" },
@@ -93,16 +93,12 @@ export default function NavBar() {
                 About
               </Link>
             )}
-            <UserAvatar name={user.username} className="ml-2" />
-            <button
-              type="button"
-              onClick={handleLogout}
+            <UserMenu
+              name={user.username}
+              onLogout={handleLogout}
               disabled={isSessionActive}
-              title={isSessionActive ? LOCKED_TITLE : undefined}
-              className="ml-1 rounded-md px-3 py-1.5 text-sm font-medium text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-900 active:scale-95 disabled:cursor-not-allowed disabled:text-gray-300 disabled:hover:bg-transparent"
-            >
-              Log out
-            </button>
+              disabledTitle={LOCKED_TITLE}
+            />
           </div>
         ) : (
           <div className="flex items-center gap-2">
