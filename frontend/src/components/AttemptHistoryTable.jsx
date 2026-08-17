@@ -75,7 +75,7 @@ export default function AttemptHistoryTable({ sessions }) {
   return (
     <div className="overflow-x-auto">
       <table className="min-w-full divide-y divide-gray-100 text-sm">
-        <thead className="bg-gray-50">
+        <thead className="bg-indigo-50/60">
           <tr>
             {COLUMNS.map((col) => (
               <th
@@ -110,10 +110,15 @@ export default function AttemptHistoryTable({ sessions }) {
                 </td>
                 <td className="px-6 py-3">
                   <span
-                    className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                      isComplete ? "bg-green-50 text-green-700" : "bg-yellow-50 text-yellow-700"
+                    className={`inline-flex items-center gap-1.5 text-sm font-medium ${
+                      isComplete ? "text-emerald-600" : "text-indigo-600"
                     }`}
                   >
+                    <span
+                      className={`h-1.5 w-1.5 rounded-full ${
+                        isComplete ? "bg-emerald-500" : "bg-indigo-500"
+                      }`}
+                    />
                     {isComplete ? "Completed" : "In progress"}
                   </span>
                 </td>

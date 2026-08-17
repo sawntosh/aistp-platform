@@ -17,6 +17,10 @@ export async function submitAnswer({ sessionId, questionId, optionId }) {
   });
 }
 
+export async function finishSession(sessionId) {
+  return apiFetch(`/questions/sessions/${sessionId}/finish/`, { method: "POST" });
+}
+
 // -- Admin: domains --------------------------------------------------------
 
 export async function fetchDomains() {

@@ -6,6 +6,7 @@ import json
 
 from django.db import transaction
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import generics, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import JSONParser, MultiPartParser
@@ -34,8 +35,8 @@ class QuestionListView(APIView):
     PracticeSession that subsequent AnswerSubmitView calls attach to.
 
     Weighted delivery towards the learner's weakest domains (FR-07) is
-    intentionally not implemented here yet -- it depends on
-    services.analytics_service.get_weakest_domains, which is still a stub.
+    intentionally not implemented here yet, though
+    services.analytics_service.get_weakest_domains is now available for it.
     """
     permission_classes = [permissions.IsAuthenticated]
 
@@ -101,6 +102,31 @@ class AnswerSubmitView(APIView):
                 "is_correct": is_correct,
                 "correct_option_id": correct_option.id if correct_option else None,
                 "correct_option_text": correct_option.text if correct_option else None,
+            }
+        )
+
+
+class SessionFinishView(APIView):
+    """Marks a PracticeSession as finished and records its final score --
+    feeds the analytics dashboard's session history and streak. Idempotent:
+    calling it again on an already-finished session just returns the
+    existing result instead of re-scoring."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, session_id):
+        session = get_object_or_404(PracticeSession, id=session_id, user=request.user)
+
+        if session.finished_at is None:
+            session.score = session.attempts.filter(is_correct=True).count()
+            session.finished_at = timezone.now()
+            session.save(update_fields=["score", "finished_at"])
+
+        return Response(
+            {
+                "id": session.id,
+                "finished_at": session.finished_at,
+                "question_count": session.question_count,
+                "score": session.score,
             }
         )
 
