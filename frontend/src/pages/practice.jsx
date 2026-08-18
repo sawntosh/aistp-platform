@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import { useAuth } from "../context/AuthContext";
+import { usePracticeSession } from "../context/PracticeSessionContext";
 import { fetchDomains, fetchPracticeQuestions, finishSession, submitAnswer } from "../services/questionsService";
 import QuestionCard from "../components/QuestionCard";
 import FeedbackPanel from "../components/FeedbackPanel";
