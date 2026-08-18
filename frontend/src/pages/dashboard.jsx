@@ -142,7 +142,7 @@ export default function DashboardPage() {
             <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">
               CTFL Practice &middot; Performance
             </p>
-            <h1 className="mt-1 font-serif text-3xl text-gray-900">Your readiness report</h1>
+            <h1 className="mt-1 font-serif text-3xl text-gray-900">Your Performance Report</h1>
             <p className="mt-1 text-sm text-gray-500">
               Updated moments ago &middot; based on {completedSessions.length} completed session
               {completedSessions.length === 1 ? "" : "s"}
