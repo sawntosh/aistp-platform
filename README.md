@@ -80,6 +80,7 @@ python manage.py runserver
 ```bash
 cd frontend
 npm install
+cp .env.local.example .env.local   # sets NEXT_PUBLIC_API_BASE_URL for the Django API above
 npm run dev
 ```
 
