@@ -27,6 +27,20 @@ const QUESTION_TYPES = [
 ];
 const OPTION_BASED_TYPES = new Set(["mcq", "true_false", "multi_select"]);
 
+// Must match services.question_generation_service.DOMAIN_TITLES on the
+// backend exactly -- these are the only 6 domain names generation will
+// accept/create. Kept as a fixed list (not fetched) so the "Generate from
+// document" panel still works on a brand-new, unseeded database where no
+// Domain rows exist yet -- generation itself is what creates them.
+const GENERATION_DOMAINS = [
+  "Domain 1: Fundamental of Testing",
+  "Domain 2 - Testing Throughout the Software Development Lifecycle",
+  "Domain 3 - Static Testing",
+  "Domain 4 - Test Analysis and Design",
+  "Domain 5 - Managing Test Activities",
+  "Domain 6 - Test Tools",
+];
+
 function emptyForm(domainId) {
   return {
     id: null,
@@ -79,6 +93,7 @@ export default function AdminPage() {
 
   const [genFile, setGenFile] = useState(null);
   const [genTypes, setGenTypes] = useState(QUESTION_TYPES.map((t) => t.value));
+  const [genDomains, setGenDomains] = useState(GENERATION_DOMAINS);
   const [genTargetPerDomain, setGenTargetPerDomain] = useState(10);
   const [genJob, setGenJob] = useState(null);
   const [genError, setGenError] = useState("");
@@ -168,14 +183,19 @@ export default function AdminPage() {
     setGenTypes((types) => (types.includes(value) ? types.filter((t) => t !== value) : [...types, value]));
   }
 
+  function toggleGenDomain(name) {
+    setGenDomains((names) => (names.includes(name) ? names.filter((n) => n !== name) : [...names, name]));
+  }
+
   async function handleGenerate(e) {
     e.preventDefault();
-    if (!genFile || !genTypes.length) return;
+    if (!genFile || !genTypes.length || !genDomains.length) return;
     setGenError("");
     setIsGenerating(true);
     try {
       const job = await generateQuestionsFromFile(genFile, {
         questionTypes: genTypes,
+        domains: genDomains,
         targetPerDomain: genTargetPerDomain,
       });
       setGenJob(job);
@@ -404,9 +424,36 @@ export default function AdminPage() {
               </div>
             </div>
 
+            <div>
+              <div className="mb-2 flex items-center justify-between">
+                <p className="text-sm font-medium text-gray-700">Domains to generate for</p>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setGenDomains((names) => (names.length === GENERATION_DOMAINS.length ? [] : GENERATION_DOMAINS))
+                  }
+                  className="text-xs font-medium text-indigo-600 hover:underline"
+                >
+                  {genDomains.length === GENERATION_DOMAINS.length ? "Deselect all" : "Select all"}
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-4">
+                {GENERATION_DOMAINS.map((name) => (
+                  <label key={name} className="flex items-center gap-1.5 text-sm text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={genDomains.includes(name)}
+                      onChange={() => toggleGenDomain(name)}
+                    />
+                    {name}
+                  </label>
+                ))}
+              </div>
+            </div>
+
             <button
               type="submit"
-              disabled={!genFile || !genTypes.length || isGenerating}
+              disabled={!genFile || !genTypes.length || !genDomains.length || isGenerating}
               className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
             >
               {isGenerating ? "Generating…" : "Generate questions"}

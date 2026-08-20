@@ -510,6 +510,42 @@ class AdminGenerationJobTests(APITestCase):
         mock_thread.assert_called_once()
         mock_thread.return_value.start.assert_called_once()
 
+    @patch("questions.views.threading.Thread")
+    def test_admin_upload_defaults_to_all_domains(self, mock_thread):
+        from services.question_generation_service import DOMAIN_TITLES
+
+        self.client.force_authenticate(user=self.admin)
+        upload = SimpleUploadedFile("syllabus.pdf", b"%PDF-1.4 fake", content_type="application/pdf")
+        response = self.client.post("/api/questions/admin/generate/", {"file": upload}, format="multipart")
+
+        self.assertEqual(response.status_code, 202)
+        job = GenerationJob.objects.get(id=response.data["id"])
+        self.assertEqual(job.domain_names, list(DOMAIN_TITLES))
+
+    @patch("questions.views.threading.Thread")
+    def test_admin_upload_can_scope_to_one_domain(self, mock_thread):
+        self.client.force_authenticate(user=self.admin)
+        upload = SimpleUploadedFile("syllabus.pdf", b"%PDF-1.4 fake", content_type="application/pdf")
+        response = self.client.post(
+            "/api/questions/admin/generate/",
+            {"file": upload, "domains": ["Domain 3 - Static Testing"]},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 202)
+        job = GenerationJob.objects.get(id=response.data["id"])
+        self.assertEqual(job.domain_names, ["Domain 3 - Static Testing"])
+
+    def test_admin_upload_rejects_unknown_domain_name(self):
+        self.client.force_authenticate(user=self.admin)
+        upload = SimpleUploadedFile("syllabus.pdf", b"%PDF-1.4 fake", content_type="application/pdf")
+        response = self.client.post(
+            "/api/questions/admin/generate/",
+            {"file": upload, "domains": ["Not A Real Domain"]},
+            format="multipart",
+        )
+        self.assertEqual(response.status_code, 400)
+
 
 class GenerationServicePersistenceTests(APITestCase):
     """save_generated_question + the per-type validators, exercised

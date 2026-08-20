@@ -69,11 +69,12 @@ export async function importQuestionsFile(file) {
 
 // -- Admin: RAG generation from an uploaded PDF/DOCX -------------------------
 
-export async function generateQuestionsFromFile(file, { questionTypes = [], targetPerDomain = 10 } = {}) {
+export async function generateQuestionsFromFile(file, { questionTypes = [], domains = [], targetPerDomain = 10 } = {}) {
   const formData = new FormData();
   formData.append("file", file);
   formData.append("target_per_domain", String(targetPerDomain));
   questionTypes.forEach((type) => formData.append("question_types", type));
+  domains.forEach((name) => formData.append("domains", name));
   return apiFetch("/questions/admin/generate/", {
     method: "POST",
     body: formData,

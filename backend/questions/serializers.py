@@ -6,6 +6,8 @@ import random
 
 from rest_framework import serializers
 
+from services.question_generation_service import DOMAIN_TITLES
+
 from .models import AnswerOption, Domain, FillBlankAnswer, GenerationJob, MatchingPair, Question
 
 
@@ -205,6 +207,7 @@ class GenerationJobSerializer(serializers.ModelSerializer):
             "id",
             "source_filename",
             "question_types",
+            "domain_names",
             "target_per_domain",
             "status",
             "progress",
@@ -227,6 +230,11 @@ class GenerationJobCreateSerializer(serializers.Serializer):
         required=False,
         default=list,
     )
+    domains = serializers.ListField(
+        child=serializers.ChoiceField(choices=[(name, name) for name in DOMAIN_TITLES]),
+        required=False,
+        default=list,
+    )
     target_per_domain = serializers.IntegerField(required=False, default=10, min_value=1, max_value=30)
 
     def validate_file(self, value):
@@ -237,4 +245,5 @@ class GenerationJobCreateSerializer(serializers.Serializer):
 
     def validate(self, attrs):
         attrs["question_types"] = attrs.get("question_types") or [choice for choice, _ in Question.QuestionType.choices]
+        attrs["domains"] = attrs.get("domains") or list(DOMAIN_TITLES)
         return attrs

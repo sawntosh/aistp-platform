@@ -261,6 +261,7 @@ class AdminGenerationJobViewSet(
             source_file=data["file"],
             source_filename=data["file"].name,
             question_types=data["question_types"],
+            domain_names=data["domains"],
             target_per_domain=data["target_per_domain"],
         )
 

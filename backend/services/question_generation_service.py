@@ -787,9 +787,9 @@ def run_generation(job_id: int):
     """Entry point run on a background thread by
     questions.views.GenerationJobViewSet.create. Extracts the uploaded
     document, builds the RAG index, and generates+saves
-    job.target_per_domain questions for each of the 6 domains, cycling
-    through job.question_types. Never raises -- failures are recorded on
-    the job row instead."""
+    job.target_per_domain questions for each domain in job.domain_names
+    (all 6 if empty), cycling through job.question_types. Never raises --
+    failures are recorded on the job row instead."""
 
     job = GenerationJob.objects.get(id=job_id)
     _update_job(job, status=GenerationJob.Status.PROCESSING)
@@ -805,10 +805,12 @@ def run_generation(job_id: int):
         if not question_types:
             question_types = [Question.QuestionType.MCQ]
 
+        target_domains = [d for d in (job.domain_names or []) if d in DOMAIN_TITLES] or DOMAIN_TITLES
+
         progress: Dict[str, Dict] = {}
         summary = {"created": 0, "domains": {}, "types": {}}
 
-        for domain_name in DOMAIN_TITLES:
+        for domain_name in target_domains:
             domain_items = get_domain_learning_objectives(chunks, domain_name)
             if not domain_items:
                 progress[domain_name] = {"generated": 0, "target": job.target_per_domain, "note": "no learning objectives found"}
