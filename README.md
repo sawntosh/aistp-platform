@@ -6,13 +6,13 @@
 
 **AI-Assisted Software Testing Practice Platform**
 
-An ISTQB CTFL v4.0 exam-prep platform with Gemini-powered explanations and domain-level performance analytics.
+An ISTQB CTFL v4.0 exam-prep platform with Groq-powered explanations, RAG-based question generation, and domain-level performance analytics.
 
 [![Django](https://img.shields.io/badge/Django-6.0-092E20?style=for-the-badge&logo=django&logoColor=white)](https://www.djangoproject.com/)
 [![Next.js](https://img.shields.io/badge/Next.js-14-000000?style=for-the-badge&logo=next.js&logoColor=white)](https://nextjs.org/)
 [![React](https://img.shields.io/badge/React-18-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Supabase-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
-[![Gemini](https://img.shields.io/badge/Gemini_API-AI_Explanations-8E75B2?style=for-the-badge&logo=googlegemini&logoColor=white)](https://ai.google.dev/)
+[![Groq](https://img.shields.io/badge/Groq_API-AI_Explanations-F55036?style=for-the-badge&logo=groq&logoColor=white)](https://groq.com/)
 
 [Report Bug](https://github.com/sawntosh/aistp-platform/issues) · [Request Feature](https://github.com/sawntosh/aistp-platform/issues)
 
@@ -25,7 +25,7 @@ An ISTQB CTFL v4.0 exam-prep platform with Gemini-powered explanations and domai
 - 🔐 **Secure auth** — JWT-based login/registration with bcrypt password hashing
 - 📚 **Domain-organized question bank** covering the ISTQB CTFL v4.0 syllabus
 - ✅ **Instant scoring** on every practice attempt
-- 🤖 **AI explanations** for wrong answers, generated on-demand via Gemini
+- 🤖 **AI explanations** for wrong answers, generated on-demand via Groq
 - 📊 **Analytics dashboard** — accuracy broken down per syllabus domain
 - 🛠️ **Admin CRUD** for managing questions and domains
 
@@ -39,7 +39,7 @@ An ISTQB CTFL v4.0 exam-prep platform with Gemini-powered explanations and domai
 | Backend    | Django, Django REST Framework                             |
 | Auth       | djangorestframework-simplejwt, bcrypt                      |
 | Database   | PostgreSQL (Supabase free tier)                            |
-| AI         | Google Gemini API (`gemini-1.5-flash`)                     |
+| AI         | Groq API (`llama-3.3-70b-versatile`)                       |
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -48,7 +48,7 @@ An ISTQB CTFL v4.0 exam-prep platform with Gemini-powered explanations and domai
 ### Prerequisites
 - Python 3.11+
 - Node.js 18+
-- A [Gemini API key](https://ai.google.dev/)
+- A [Groq API key](https://console.groq.com/keys) (free)
 
 ### Backend
 
@@ -63,7 +63,7 @@ Create `backend/.env`:
 ```env
 SECRET_KEY=your-django-secret-key
 DATABASE_URL=your-postgres-connection-string
-GEMINI_API_KEY=your-gemini-api-key
+GROQ_API_KEY=your-groq-api-key
 ```
 
 Run it:
@@ -95,9 +95,9 @@ aistp-platform/
 │   ├── aistp/           # settings, urls, wsgi/asgi
 │   ├── accounts/        # user model, register/login
 │   ├── questions/       # domains, questions, attempts, sessions
-│   ├── explanations/    # Gemini-powered AI explanations
+│   ├── explanations/    # Groq-powered AI explanations
 │   ├── analytics/       # performance dashboard
-│   └── services/        # gemini_service, scoring_service, analytics_service
+│   └── services/        # explanation_service, question_generation_service, scoring_service, analytics_service
 └── frontend/
     └── src/
         ├── components/

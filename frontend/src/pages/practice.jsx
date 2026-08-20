@@ -32,7 +32,7 @@ export default function PracticePage() {
   const [totalCount, setTotalCount] = useState(0);
   const [skippedIds, setSkippedIds] = useState(() => new Set());
   const [sessionId, setSessionId] = useState(null);
-  const [selectedOptionId, setSelectedOptionId] = useState(null);
+  const [answer, setAnswer] = useState(null);
   const [result, setResult] = useState(null);
   const [correctCount, setCorrectCount] = useState(0);
   const [isLoadingQuestions, setIsLoadingQuestions] = useState(false);
@@ -78,7 +78,7 @@ export default function PracticePage() {
       setTotalCount(data.questions.length);
       setSkippedIds(new Set());
       setSessionId(data.session_id);
-      setSelectedOptionId(null);
+      setAnswer(null);
       setResult(null);
       setCorrectCount(0);
       setIsSessionComplete(false);
@@ -101,9 +101,9 @@ export default function PracticePage() {
   const isLastQuestion = queue.length === 1;
   const currentPosition = totalCount - queue.length + 1;
 
-  function handleSelectOption(optionId) {
+  function handleAnswerChange(nextAnswer) {
     if (result) return;
-    setSelectedOptionId(optionId);
+    setAnswer(nextAnswer);
     setLoadError("");
   }
 
@@ -111,23 +111,59 @@ export default function PracticePage() {
     if (result || queue.length <= 1) return;
     setQueue((q) => [...q.slice(1), q[0]]);
     setSkippedIds((s) => new Set(s).add(currentQuestion.id));
-    setSelectedOptionId(null);
+    setAnswer(null);
     setLoadError("");
   }
 
+  // Builds the AnswerSubmitSerializer payload shape for the current
+  // question's type -- see services/questionsService.js#submitAnswer.
+  function buildAnswerPayload(question, value) {
+    switch (question.question_type) {
+      case "multi_select":
+        return { selected_option_ids: value };
+      case "fill_blank":
+        return { text_answer: value };
+      case "matching":
+        return { matching_response: value };
+      default: // mcq / true_false
+        return { selected_option_id: value };
+    }
+  }
+
+  // Human-readable "correct answer" summary shown by FeedbackPanel when
+  // the learner got it wrong -- shape of `data` depends on question_type.
+  function describeCorrectAnswer(question, data) {
+    switch (question.question_type) {
+      case "multi_select":
+        return (data.correct_option_texts ?? []).join(", ");
+      case "fill_blank":
+        return data.correct_answer ?? "";
+      case "matching":
+        return question.matching_pairs
+          .map((pair) => `${pair.prompt_text} → ${data.correct_pairing?.[pair.id]}`)
+          .join("; ");
+      default: // mcq / true_false
+        return data.correct_option_text ?? "";
+    }
+  }
+
   async function handleSubmit() {
-    if (!selectedOptionId || result || isSubmitting) return;
+    if (result || isSubmitting) return;
     setIsSubmitting(true);
     try {
       const data = await submitAnswer({
         sessionId,
         questionId: currentQuestion.id,
-        optionId: selectedOptionId,
+        answer: buildAnswerPayload(currentQuestion, answer),
       });
       setResult({
         isCorrect: data.is_correct,
         correctOptionId: data.correct_option_id,
-        correctOptionText: data.correct_option_text,
+        correctOptionIds: data.correct_option_ids,
+        correctOptionTexts: data.correct_option_texts,
+        correctAnswer: data.correct_answer,
+        correctPairing: data.correct_pairing,
+        correctAnswerText: describeCorrectAnswer(currentQuestion, data),
       });
       if (data.is_correct) setCorrectCount((c) => c + 1);
     } catch {
@@ -154,7 +190,7 @@ export default function PracticePage() {
       setIsSessionComplete(true);
       return;
     }
-    setSelectedOptionId(null);
+    setAnswer(null);
     setResult(null);
     setLoadError("");
   }
@@ -382,20 +418,20 @@ export default function PracticePage() {
         <div key={currentQuestion?.id} className="animate-fade-in">
           <QuestionCard
             question={currentQuestion}
-            selectedOptionId={selectedOptionId}
-            onSelectOption={handleSelectOption}
+            answer={answer}
+            onAnswerChange={handleAnswerChange}
             onSubmit={handleSubmit}
             onSkip={handleSkip}
             canSkip={queue.length > 1}
             isAnswered={Boolean(result)}
             isSubmitting={isSubmitting}
-            correctOptionId={result?.correctOptionId}
+            result={result}
           />
 
           {result && (
             <FeedbackPanel
               isCorrect={result.isCorrect}
-              correctOptionText={result.correctOptionText}
+              correctOptionText={result.correctAnswerText}
               questionId={currentQuestion.id}
               onNext={handleNext}
               isLastQuestion={isLastQuestion}

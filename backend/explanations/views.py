@@ -1,6 +1,6 @@
 """
-explanations/views.py -- FR-04: AI Explanation (Gemini)
-Checks the AIExplanation cache before calling the Gemini API.
+explanations/views.py -- FR-04: AI Explanation (Groq)
+Checks the AIExplanation cache before calling the Groq API.
 """
 from django.shortcuts import get_object_or_404
 from rest_framework import permissions, status
@@ -8,9 +8,9 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from questions.models import Question
-from services.gemini_service import (
-    GEMINI_MODEL,
-    GeminiServiceError,
+from services.explanation_service import (
+    EXPLANATION_MODEL,
+    ExplanationServiceError,
     build_fallback_explanation,
     generate_explanation,
 )
@@ -49,11 +49,11 @@ class ExplainView(APIView):
                 [option.text for option in options],
                 correct_option.text,
             )
-        except GeminiServiceError:
-            # Gemini is down/rate-limited/returned nothing: degrade to a
+        except ExplanationServiceError:
+            # Groq is down/rate-limited/returned nothing: degrade to a
             # canned explanation instead of failing the request outright
             # (NFR-02 availability). Not cached, so the next request for
-            # this question retries Gemini rather than being stuck with
+            # this question retries Groq rather than being stuck with
             # the fallback text forever.
             fallback_text = build_fallback_explanation(
                 [option.text for option in options],
@@ -65,7 +65,7 @@ class ExplainView(APIView):
         # for the same (uncached) question land concurrently.
         explanation, _ = AIExplanation.objects.get_or_create(
             question=question,
-            defaults={"explanation_text": explanation_text, "generated_by_model": GEMINI_MODEL},
+            defaults={"explanation_text": explanation_text, "generated_by_model": EXPLANATION_MODEL},
         )
 
         return Response(AIExplanationSerializer(explanation).data)

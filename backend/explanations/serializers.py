@@ -1,5 +1,5 @@
 """
-explanations/serializers.py -- FR-04: AI Explanation (Gemini)
+explanations/serializers.py -- FR-04: AI Explanation (Groq)
 """
 from rest_framework import serializers
 
@@ -13,7 +13,7 @@ class ExplainRequestSerializer(serializers.Serializer):
 class AIExplanationSerializer(serializers.ModelSerializer):
     explanation = serializers.CharField(source="explanation_text")
     # Always False here: a persisted AIExplanation is only ever created from
-    # a real Gemini response (see ExplainView) -- the fallback path never
+    # a real Groq response (see ExplainView) -- the fallback path never
     # reaches this serializer. Included so the response contract is stable.
     is_fallback = serializers.SerializerMethodField()
 

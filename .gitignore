@@ -8,6 +8,7 @@ env/
 *.egg-info/
 db.sqlite3
 staticfiles/
+backend/media/
 
 # Node / React / Next.js
 node_modules/
