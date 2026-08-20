@@ -206,13 +206,26 @@ class AdminQuestionViewSet(viewsets.ModelViewSet):
         """Bulk-create questions from a JSON file upload (field name 'file')
         or a raw JSON array body -- see questions/imports.py for the row
         format. Validation is all-or-nothing: a bad row rejects the whole
-        batch instead of partially importing it."""
+        batch instead of partially importing it.
+
+        A file upload may also include 'domain_id': when present, every
+        row's "Domain" field is overridden with that domain's name before
+        validation, so a single-domain export doesn't need a correct (or
+        any) "Domain" value per row -- the admin picks it once instead."""
         uploaded_file = request.FILES.get("file")
         if uploaded_file is not None:
             try:
                 rows = json.loads(uploaded_file.read().decode("utf-8"))
             except (json.JSONDecodeError, UnicodeDecodeError):
                 return Response({"detail": "Uploaded file is not valid JSON."}, status=status.HTTP_400_BAD_REQUEST)
+
+            domain_id = request.data.get("domain_id")
+            if domain_id:
+                domain = get_object_or_404(Domain, id=domain_id)
+                if isinstance(rows, list):
+                    for row in rows:
+                        if isinstance(row, dict):
+                            row["Domain"] = domain.name
         elif isinstance(request.data, list):
             rows = request.data
         else:

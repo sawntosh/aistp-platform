@@ -87,6 +87,7 @@ export default function AdminPage() {
   const [isSaving, setIsSaving] = useState(false);
 
   const [importFile, setImportFile] = useState(null);
+  const [importDomainId, setImportDomainId] = useState("");
   const [importResult, setImportResult] = useState(null);
   const [importErrors, setImportErrors] = useState(null);
   const [isImporting, setIsImporting] = useState(false);
@@ -161,9 +162,10 @@ export default function AdminPage() {
     setImportResult(null);
     setImportErrors(null);
     try {
-      const result = await importQuestionsFile(importFile);
+      const result = await importQuestionsFile(importFile, importDomainId || null);
       setImportResult(result);
       setImportFile(null);
+      setImportDomainId("");
       e.target.reset();
       loadData();
     } catch (err) {
@@ -493,7 +495,8 @@ export default function AdminPage() {
           <h2 className="text-lg font-semibold text-gray-900">Import from JSON</h2>
           <p className="mt-1 text-sm text-gray-500">
             Upload a JSON file containing an array of questions (Domain, Difficulty, Question Text, Option
-            A-D, Correct Option, ...). Domains are matched by name and created automatically if new.
+            A-D, Correct Option, ...). Domains are matched by name and created automatically if new — or
+            pick a domain below to use it for every question in the file, overriding whatever each row says.
           </p>
           <form onSubmit={handleImport} className="mt-4 flex flex-wrap items-center gap-3">
             <input
@@ -502,6 +505,18 @@ export default function AdminPage() {
               onChange={(e) => setImportFile(e.target.files?.[0] ?? null)}
               className="text-sm text-gray-700 file:mr-3 file:rounded-lg file:border-0 file:bg-indigo-50 file:px-4 file:py-2 file:text-sm file:font-medium file:text-indigo-700 hover:file:bg-indigo-100"
             />
+            <select
+              value={importDomainId}
+              onChange={(e) => setImportDomainId(e.target.value)}
+              className="rounded-lg border border-gray-200 px-3 py-2 text-sm"
+            >
+              <option value="">Use each row&apos;s Domain field</option>
+              {domains.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                </option>
+              ))}
+            </select>
             <button
               type="submit"
               disabled={!importFile || isImporting}

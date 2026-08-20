@@ -269,6 +269,162 @@ class AdminQuestionImportTests(APITestCase):
         )
         self.assertEqual(response.status_code, 400)
 
+    def test_admin_import_with_domain_id_overrides_each_rows_domain_field(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        target_domain = Domain.objects.create(name="Domain 3 - Static Testing")
+        self.client.force_authenticate(user=self.admin)
+        # Neither row names "Domain 3 - Static Testing" -- one names a
+        # different domain, the other omits "Domain" entirely.
+        rows = [
+            {
+                "Domain": "Domain 1 - Fundamentals of Testing",
+                "Difficulty": "Easy",
+                "Question Text": "Which of the following is a typical test objective?",
+                "Option A": "Writing source code",
+                "Option B": "Building confidence in quality",
+                "Correct Option": "B",
+            },
+            {
+                "Difficulty": "Medium",
+                "Question Text": "Which statement differentiates testing from debugging?",
+                "Option A": "They are identical",
+                "Option B": "Testing triggers failures; debugging finds and removes causes",
+                "Correct Option": "B",
+            },
+        ]
+        upload = SimpleUploadedFile("questions.json", json.dumps(rows).encode("utf-8"), content_type="application/json")
+        response = self.client.post(
+            "/api/questions/admin/questions/import/",
+            {"file": upload, "domain_id": target_domain.id},
+            format="multipart",
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data["created"], 2)
+        self.assertEqual(target_domain.questions.count(), 2)
+        self.assertFalse(Domain.objects.filter(name="Domain 1 - Fundamentals of Testing").exists())
+
+
+class AdminQuestionImportMultiTypeTests(APITestCase):
+    """Bulk JSON import across all 5 question types -- rows shaped like a
+    real admin-generated export (True/False, Multiple Answer, Fill in
+    the Blank, Matching Pairs), not just the original MCQ-only shape."""
+
+    def setUp(self):
+        self.admin = User.objects.create_user(
+            username="admin5", email="admin5@gmail.com", password="Str0ngPass!23", role=User.Role.ADMIN
+        )
+        self.client.force_authenticate(user=self.admin)
+
+    def _import(self, rows):
+        return self.client.post("/api/questions/admin/questions/import/", rows, format="json")
+
+    def test_true_false_row_imports_correctly(self):
+        response = self._import(
+            [
+                {
+                    "Domain": "Domain 1 - Fundamentals of Testing",
+                    "Question Type": "True/False",
+                    "Difficulty": "Easy",
+                    "Question Text": "Testing and debugging are the same activity.",
+                    "Correct Answer": "False",
+                }
+            ]
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        question = Question.objects.get()
+        self.assertEqual(question.question_type, Question.QuestionType.TRUE_FALSE)
+        options = {opt.text: opt.is_correct for opt in question.options.all()}
+        self.assertEqual(options, {"True": False, "False": True})
+
+    def test_multiple_answer_row_imports_correctly(self):
+        response = self._import(
+            [
+                {
+                    "Domain": "Domain 1 - Fundamentals of Testing",
+                    "Question Type": "Multiple Answer",
+                    "Difficulty": "Medium",
+                    "Question Text": "Which are typical test objectives?",
+                    "Option A": "Preventing defects",
+                    "Option B": "Providing information for decisions",
+                    "Option C": "Writing production code",
+                    "Option D": "Building confidence",
+                    "Option E": "Managing the project budget",
+                    "Correct Options": ["A", "B", "D"],
+                }
+            ]
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        question = Question.objects.get()
+        self.assertEqual(question.question_type, Question.QuestionType.MULTI_SELECT)
+        self.assertEqual(question.options.count(), 5)
+        self.assertEqual(question.options.filter(is_correct=True).count(), 3)
+
+    def test_fill_blank_row_imports_correctly(self):
+        response = self._import(
+            [
+                {
+                    "Domain": "Domain 1 - Fundamentals of Testing",
+                    "Question Type": "Fill in the Blank",
+                    "Difficulty": "Easy",
+                    "Question Text": "________ is a flaw in a work product.",
+                    "Correct Answer": "A defect",
+                    "Accepted Answers": ["defect"],
+                }
+            ]
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        question = Question.objects.get()
+        self.assertEqual(question.question_type, Question.QuestionType.FILL_BLANK)
+        self.assertEqual(
+            set(question.blank_answers.values_list("answer_text", flat=True)), {"A defect", "defect"}
+        )
+
+    def test_matching_row_imports_correctly_and_ignores_blank_template_pair(self):
+        response = self._import(
+            [
+                {
+                    "Domain": "Domain 1 - Fundamentals of Testing",
+                    "Question Type": "Matching Pairs",
+                    "Difficulty": "Medium",
+                    "Question Text": "Match each term to its definition.",
+                    "Pairs": [
+                        {"Left": "Error", "Right": "A human action that produces an incorrect result"},
+                        {"Left": "Defect", "Right": "A flaw in a work product"},
+                    ],
+                    "Add Pair": {"Left": "", "Right": ""},
+                }
+            ]
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        question = Question.objects.get()
+        self.assertEqual(question.question_type, Question.QuestionType.MATCHING)
+        self.assertEqual(question.matching_pairs.count(), 2)
+
+    def test_multiple_answer_row_rejects_only_one_correct_option(self):
+        response = self._import(
+            [
+                {
+                    "Domain": "Domain 1 - Fundamentals of Testing",
+                    "Question Type": "Multiple Answer",
+                    "Difficulty": "Medium",
+                    "Question Text": "Which are typical test objectives?",
+                    "Option A": "Preventing defects",
+                    "Option B": "Writing production code",
+                    "Correct Options": ["A"],
+                }
+            ]
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(Question.objects.count(), 0)
+
+    def test_unrecognized_question_type_rejects_whole_batch(self):
+        response = self._import(
+            [{"Domain": "Domain 1 - Fundamentals of Testing", "Difficulty": "Easy", "Question Text": "Q?", "Question Type": "Essay"}]
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("errors", response.data)
+
 
 class MultiTypeQuestionDeliveryTests(APITestCase):
     """Scoring + submission for the non-MCQ question types."""

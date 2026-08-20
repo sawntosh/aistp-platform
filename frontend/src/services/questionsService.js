@@ -58,9 +58,10 @@ export async function deleteQuestion(id) {
 
 // -- Admin: bulk JSON import -------------------------------------------------
 
-export async function importQuestionsFile(file) {
+export async function importQuestionsFile(file, domainId = null) {
   const formData = new FormData();
   formData.append("file", file);
+  if (domainId) formData.append("domain_id", String(domainId));
   return apiFetch("/questions/admin/questions/import/", {
     method: "POST",
     body: formData,
