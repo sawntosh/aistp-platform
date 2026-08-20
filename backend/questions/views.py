@@ -3,11 +3,12 @@ questions/views.py -- FR-02 (Question Delivery), FR-03 (Scoring),
 FR-07 (weighted domain delivery), FR-06 (Admin CRUD + JSON import).
 """
 import json
+import threading
 
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from rest_framework import generics, permissions, status, viewsets
+from rest_framework import generics, mixins, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import JSONParser, MultiPartParser
 from rest_framework.response import Response
@@ -15,13 +16,16 @@ from rest_framework.views import APIView
 
 from accounts.permissions import IsAdminRole
 from services.analytics_service import record_attempt
+from services.question_generation_service import run_generation
 from services.scoring_service import score_answer
 
 from .imports import import_questions, validate_rows
-from .models import AnswerOption, Attempt, Domain, PracticeSession, Question
+from .models import AnswerOption, Attempt, Domain, GenerationJob, PracticeSession, Question
 from .serializers import (
     AnswerSubmitSerializer,
     DomainSerializer,
+    GenerationJobCreateSerializer,
+    GenerationJobSerializer,
     QuestionAdminSerializer,
     QuestionPublicSerializer,
 )
@@ -71,7 +75,12 @@ class QuestionListView(APIView):
 
 class AnswerSubmitView(APIView):
     """FR-03: score the submitted answer, write an Attempt row, and
-    update PerformanceAnalytics for the relevant domain."""
+    update PerformanceAnalytics for the relevant domain.
+
+    The expected payload shape depends on the question's question_type
+    -- see AnswerSubmitSerializer -- so this view pulls out the right
+    field once it has loaded the question, builds a scoring_service
+    submission dict, and records the matching Attempt field(s)."""
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
@@ -80,30 +89,83 @@ class AnswerSubmitView(APIView):
         data = serializer.validated_data
 
         session = get_object_or_404(PracticeSession, id=data["session_id"], user=request.user)
-        question = get_object_or_404(Question, id=data["question_id"], is_active=True)
-        selected_option = get_object_or_404(
-            AnswerOption, id=data["selected_option_id"], question=question
+        question = get_object_or_404(
+            Question.objects.prefetch_related("options", "blank_answers", "matching_pairs"),
+            id=data["question_id"],
+            is_active=True,
         )
+        qtype = question.question_type
 
-        is_correct = score_answer(selected_option)
+        submission = {}
+        attempt_fields = {}
+        selected_options = None
 
-        Attempt.objects.create(
+        if qtype in (Question.QuestionType.MCQ, Question.QuestionType.TRUE_FALSE):
+            option_id = data.get("selected_option_id")
+            if option_id is None:
+                return Response({"detail": "selected_option_id is required for this question."}, status=status.HTTP_400_BAD_REQUEST)
+            selected_option = get_object_or_404(AnswerOption, id=option_id, question=question)
+            submission["selected_option"] = selected_option
+            attempt_fields["selected_option"] = selected_option
+
+        elif qtype == Question.QuestionType.MULTI_SELECT:
+            option_ids = data.get("selected_option_ids") or []
+            if not option_ids:
+                return Response({"detail": "selected_option_ids is required for this question."}, status=status.HTTP_400_BAD_REQUEST)
+            selected_options = list(AnswerOption.objects.filter(id__in=option_ids, question=question))
+            if len(selected_options) != len(set(option_ids)):
+                return Response(
+                    {"detail": "One or more selected_option_ids are invalid for this question."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            submission["selected_options"] = selected_options
+
+        elif qtype == Question.QuestionType.FILL_BLANK:
+            text_answer = data.get("text_answer", "")
+            if not text_answer.strip():
+                return Response({"detail": "text_answer is required for this question."}, status=status.HTTP_400_BAD_REQUEST)
+            submission["text_answer"] = text_answer
+            attempt_fields["text_answer"] = text_answer
+
+        elif qtype == Question.QuestionType.MATCHING:
+            matching_response = data.get("matching_response")
+            if not matching_response:
+                return Response({"detail": "matching_response is required for this question."}, status=status.HTTP_400_BAD_REQUEST)
+            submission["matching_response"] = matching_response
+            attempt_fields["matching_response"] = matching_response
+
+        is_correct = score_answer(question, submission)
+
+        attempt = Attempt.objects.create(
             session=session,
             user=request.user,
             question=question,
-            selected_option=selected_option,
             is_correct=is_correct,
+            **attempt_fields,
         )
+        if selected_options is not None:
+            attempt.selected_options.set(selected_options)
+
         record_attempt(request.user, question.domain, is_correct)
 
-        correct_option = question.options.filter(is_correct=True).first()
-        return Response(
-            {
-                "is_correct": is_correct,
-                "correct_option_id": correct_option.id if correct_option else None,
-                "correct_option_text": correct_option.text if correct_option else None,
+        response_payload = {"is_correct": is_correct, "question_type": qtype}
+        if qtype in (Question.QuestionType.MCQ, Question.QuestionType.TRUE_FALSE):
+            correct_option = question.options.filter(is_correct=True).first()
+            response_payload["correct_option_id"] = correct_option.id if correct_option else None
+            response_payload["correct_option_text"] = correct_option.text if correct_option else None
+        elif qtype == Question.QuestionType.MULTI_SELECT:
+            correct_options = question.options.filter(is_correct=True)
+            response_payload["correct_option_ids"] = [opt.id for opt in correct_options]
+            response_payload["correct_option_texts"] = [opt.text for opt in correct_options]
+        elif qtype == Question.QuestionType.FILL_BLANK:
+            first_answer = question.blank_answers.first()
+            response_payload["correct_answer"] = first_answer.answer_text if first_answer else None
+        elif qtype == Question.QuestionType.MATCHING:
+            response_payload["correct_pairing"] = {
+                str(pair.id): pair.match_text for pair in question.matching_pairs.all()
             }
-        )
+
+        return Response(response_payload)
 
 
 class SessionFinishView(APIView):
@@ -134,7 +196,9 @@ class SessionFinishView(APIView):
 class AdminQuestionViewSet(viewsets.ModelViewSet):
     """FR-06: admin-only CRUD on questions/answer options."""
     permission_classes = [permissions.IsAuthenticated, IsAdminRole]
-    queryset = Question.objects.all().select_related("domain").prefetch_related("options")
+    queryset = Question.objects.all().select_related("domain").prefetch_related(
+        "options", "blank_answers", "matching_pairs"
+    )
     serializer_class = QuestionAdminSerializer
 
     @action(detail=False, methods=["post"], url_path="import", parser_classes=[MultiPartParser, JSONParser])
@@ -164,6 +228,45 @@ class AdminQuestionViewSet(viewsets.ModelViewSet):
         with transaction.atomic():
             summary = import_questions(cleaned_rows)
         return Response(summary, status=status.HTTP_201_CREATED)
+
+
+class AdminGenerationJobViewSet(
+    mixins.CreateModelMixin,
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    viewsets.GenericViewSet,
+):
+    """Admin-only: upload a PDF/DOCX syllabus document to kick off RAG
+    question generation (POST), then poll job status (GET list/detail).
+    Generation itself runs on a background thread -- see
+    services.question_generation_service.run_generation -- since this
+    project has no Celery/task-queue infrastructure; the request returns
+    as soon as the job row is created."""
+    permission_classes = [permissions.IsAuthenticated, IsAdminRole]
+    queryset = GenerationJob.objects.all().order_by("-created_at")
+    parser_classes = [MultiPartParser]
+
+    def get_serializer_class(self):
+        if self.action == "create":
+            return GenerationJobCreateSerializer
+        return GenerationJobSerializer
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        job = GenerationJob.objects.create(
+            created_by=request.user,
+            source_file=data["file"],
+            source_filename=data["file"].name,
+            question_types=data["question_types"],
+            target_per_domain=data["target_per_domain"],
+        )
+
+        threading.Thread(target=run_generation, args=(job.id,), daemon=True).start()
+
+        return Response(GenerationJobSerializer(job).data, status=status.HTTP_202_ACCEPTED)
 
 
 class DomainListView(generics.ListAPIView):

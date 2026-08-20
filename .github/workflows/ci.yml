@@ -51,7 +51,7 @@ jobs:
         env:
           DJANGO_SECRET_KEY: ci-test-secret
           DATABASE_URL: postgresql://aistp_user:devpassword123@localhost:5432/aistp_db
-          GEMINI_API_KEY: ci-placeholder
+          GROQ_API_KEY: ci-placeholder
         run: python manage.py test
 
   frontend-tests:

@@ -167,3 +167,14 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+
+# Uploaded syllabus documents for RAG question generation
+# (questions.models.GenerationJob.source_file).
+MEDIA_URL = 'media/'
+MEDIA_ROOT = BASE_DIR / 'media'
+
+# Model used by services/question_generation_service.py's Groq calls
+# (RAG question generation from an uploaded syllabus document). Shares
+# GROQ_API_KEY with services/explanation_service.py's AI answer
+# explanations -- one AI provider/key for the whole app.
+GENERATION_GROQ_MODEL = os.getenv("GENERATION_GROQ_MODEL", "openai/gpt-oss-120b")

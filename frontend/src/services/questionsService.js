@@ -6,13 +6,18 @@ export async function fetchPracticeQuestions(count = 10, domains = []) {
   return apiFetch(`/questions/?${params.toString()}`);
 }
 
-export async function submitAnswer({ sessionId, questionId, optionId }) {
+// `answer` shape depends on the question's question_type:
+//   mcq / true_false -> { selected_option_id }
+//   multi_select     -> { selected_option_ids: [] }
+//   fill_blank       -> { text_answer }
+//   matching         -> { matching_response: { [pairId]: matchText } }
+export async function submitAnswer({ sessionId, questionId, answer }) {
   return apiFetch("/questions/submit/", {
     method: "POST",
     body: JSON.stringify({
       session_id: sessionId,
       question_id: questionId,
-      selected_option_id: optionId,
+      ...answer,
     }),
   });
 }
@@ -60,4 +65,21 @@ export async function importQuestionsFile(file) {
     method: "POST",
     body: formData,
   });
+}
+
+// -- Admin: RAG generation from an uploaded PDF/DOCX -------------------------
+
+export async function generateQuestionsFromFile(file, { questionTypes = [], targetPerDomain = 10 } = {}) {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("target_per_domain", String(targetPerDomain));
+  questionTypes.forEach((type) => formData.append("question_types", type));
+  return apiFetch("/questions/admin/generate/", {
+    method: "POST",
+    body: formData,
+  });
+}
+
+export async function fetchGenerationJob(jobId) {
+  return apiFetch(`/questions/admin/generate/${jobId}/`);
 }

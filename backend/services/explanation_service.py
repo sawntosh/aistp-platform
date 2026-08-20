@@ -1,46 +1,58 @@
 """
-Google Gemini integration layer (report Section 4.4, Application layer).
-Abstracted as its own module so the AI provider can be swapped without
-touching route/view code (NFR-06 Scalability).
+Groq integration layer for AI answer explanations (report Section 4.4,
+Application layer). Abstracted as its own module so the AI provider can
+be swapped without touching route/view code (NFR-06 Scalability).
+
+Uses the same GROQ_API_KEY as services/question_generation_service.py
+(RAG question generation) -- one AI provider and one key for the whole
+app, instead of juggling separate systems/dashboards/quotas for each
+feature.
 """
 import os
-import google.generativeai as genai
 
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+from groq import Groq
 
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+# See question_generation_service.py's client for why the fallback
+# dummy value matters: Groq's constructor raises immediately on a None
+# api_key, which would otherwise crash Django app loading itself rather
+# than failing gracefully at the point of an actual API call.
+client = Groq(api_key=os.getenv("GROQ_API_KEY") or "not-configured")
+
+EXPLANATION_MODEL = os.getenv("EXPLANATION_GROQ_MODEL", "openai/gpt-oss-20b")
 
 # One retry absorbs transient hiccups (brief network blip, momentary rate
 # limit) before the caller gives up and falls back to a canned explanation.
-GEMINI_MAX_ATTEMPTS = 2
+EXPLANATION_MAX_ATTEMPTS = 2
 
 
-class GeminiServiceError(Exception):
-    """Raised when the Gemini API call fails or returns no usable text
+class ExplanationServiceError(Exception):
+    """Raised when the Groq API call fails or returns no usable text
     after all retry attempts are exhausted."""
 
 
-def _call_gemini(prompt):
+def _call_groq(prompt):
     last_error = None
-    for _ in range(GEMINI_MAX_ATTEMPTS):
+    for _ in range(EXPLANATION_MAX_ATTEMPTS):
         try:
-            model = genai.GenerativeModel(GEMINI_MODEL)
-            response = model.generate_content(prompt)
+            response = client.chat.completions.create(
+                model=EXPLANATION_MODEL,
+                messages=[{"role": "user", "content": prompt}],
+            )
         except Exception as exc:
-            last_error = GeminiServiceError(str(exc))
+            last_error = ExplanationServiceError(str(exc))
             continue
 
-        explanation_text = (getattr(response, "text", "") or "").strip()
+        explanation_text = (response.choices[0].message.content or "").strip()
         if explanation_text:
             return explanation_text
-        last_error = GeminiServiceError("Gemini returned an empty response.")
+        last_error = ExplanationServiceError("Groq returned an empty response.")
 
     raise last_error
 
 
 def generate_explanation(question_text, options, correct_option_text):
     """
-    Build a prompt from the question + options and call Gemini.
+    Build a prompt from the question + options and call Groq.
     Callers must check explanations.models.AIExplanation for a cached
     result before invoking this (T-08 DoS / quota countermeasure), and
     should fall back to build_fallback_explanation() if this raises.
@@ -57,12 +69,12 @@ def generate_explanation(question_text, options, correct_option_text):
         "question verbatim."
     )
 
-    return _call_gemini(prompt)
+    return _call_groq(prompt)
 
 
 def build_fallback_explanation(options, correct_option_text):
     """
-    Deterministic, non-AI explanation used when Gemini is unavailable
+    Deterministic, non-AI explanation used when Groq is unavailable
     (quota exhausted, network failure, empty response) so the learner
     still gets useful feedback instead of a bare error (NFR-02).
     """
