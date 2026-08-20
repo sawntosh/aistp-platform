@@ -2,7 +2,9 @@
 questions/views.py -- FR-02 (Question Delivery), FR-03 (Scoring),
 FR-07 (weighted domain delivery), FR-06 (Admin CRUD + JSON import).
 """
+import itertools
 import json
+import random
 import threading
 
 from django.db import transaction
@@ -34,6 +36,46 @@ DEFAULT_SESSION_SIZE = 10
 MAX_SESSION_SIZE = 40
 
 
+def _pick_stratified_question_ids(base_qs, count):
+    """Choose `count` question ids from base_qs, spreading the draw
+    across (domain, question_type) combinations round-robin before
+    falling back to a plain random pick for any remainder.
+
+    A plain `order_by('?')[:count]` is random on every call, but random
+    alone doesn't guarantee variety -- an imbalanced bank (e.g. mostly
+    mcq left over from older data, only a handful of matching/fill_blank
+    questions) can hand back a same-feeling, same-domain, same-type
+    session purely by chance. This guarantees every distinct (domain,
+    type) combination present gets pulled from before any repeats."""
+    buckets = {}
+    for domain_id, qtype, question_id in base_qs.values_list("domain_id", "question_type", "id"):
+        buckets.setdefault((domain_id, qtype), []).append(question_id)
+    for ids in buckets.values():
+        random.shuffle(ids)
+
+    keys = list(buckets.keys())
+    random.shuffle(keys)
+
+    selected = []
+    if keys:
+        exhausted = set()
+        for key in itertools.cycle(keys):
+            if len(selected) >= count or len(exhausted) >= len(keys):
+                break
+            bucket = buckets[key]
+            if not bucket:
+                exhausted.add(key)
+                continue
+            selected.append(bucket.pop())
+
+    if len(selected) < count:
+        remaining_needed = count - len(selected)
+        fallback_ids = base_qs.exclude(id__in=selected).order_by("?").values_list("id", flat=True)[:remaining_needed]
+        selected.extend(fallback_ids)
+
+    return selected
+
+
 class QuestionListView(APIView):
     """FR-02: serve a session's worth of active questions and create the
     PracticeSession that subsequent AnswerSubmitView calls attach to.
@@ -51,7 +93,7 @@ class QuestionListView(APIView):
             return Response({"detail": "count must be an integer."}, status=status.HTTP_400_BAD_REQUEST)
         count = max(1, min(count, MAX_SESSION_SIZE))
 
-        questions_qs = Question.objects.filter(is_active=True).select_related("domain").prefetch_related("options")
+        questions_qs = Question.objects.filter(is_active=True)
 
         domains_param = request.query_params.get("domains")
         if domains_param:
@@ -64,9 +106,16 @@ class QuestionListView(APIView):
                 )
             questions_qs = questions_qs.filter(domain_id__in=domain_ids)
 
-        questions = list(questions_qs.order_by("?")[:count])
-        if not questions:
+        selected_ids = _pick_stratified_question_ids(questions_qs, count)
+        if not selected_ids:
             return Response({"detail": "No active questions available."}, status=status.HTTP_404_NOT_FOUND)
+
+        questions = list(
+            Question.objects.filter(id__in=selected_ids)
+            .select_related("domain")
+            .prefetch_related("options", "blank_answers", "matching_pairs")
+        )
+        random.shuffle(questions)
 
         session = PracticeSession.objects.create(user=request.user, question_count=len(questions))
         data = QuestionPublicSerializer(questions, many=True).data

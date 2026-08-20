@@ -103,6 +103,36 @@ class QuestionDeliveryTests(APITestCase):
         )
         self.assertEqual(response.status_code, 404)
 
+    def test_question_list_spreads_across_domains_and_types_instead_of_random_luck(self):
+        # Regression test: a plain order_by('?') draw can, by chance,
+        # come back all-one-type/all-one-domain on an imbalanced bank.
+        # _pick_stratified_question_ids must pull from every distinct
+        # (domain, question_type) bucket before it repeats any of them.
+        domain_b = Domain.objects.create(name="Static Testing")
+
+        def make_true_false(domain, text):
+            q = Question.objects.create(domain=domain, text=text, question_type=Question.QuestionType.TRUE_FALSE)
+            AnswerOption.objects.create(question=q, text="True", is_correct=True)
+            AnswerOption.objects.create(question=q, text="False", is_correct=False)
+            return q
+
+        # self.domain already has 1 mcq question from setUp.
+        make_true_false(self.domain, "TF in domain A")
+        mcq_b = Question.objects.create(domain=domain_b, text="MCQ in domain B")
+        AnswerOption.objects.create(question=mcq_b, text="A", is_correct=True)
+        AnswerOption.objects.create(question=mcq_b, text="B", is_correct=False)
+        make_true_false(domain_b, "TF in domain B")
+
+        response = self.client.get("/api/questions/?count=4")
+        self.assertEqual(response.status_code, 200)
+        questions = response.data["questions"]
+        self.assertEqual(len(questions), 4)
+
+        combos = {(q["domain"]["id"], q["question_type"]) for q in questions}
+        # All 4 distinct (domain, type) buckets should appear at least
+        # once in a 4-question draw when exactly 4 buckets exist.
+        self.assertEqual(len(combos), 4)
+
 
 class AdminQuestionCrudTests(APITestCase):
     def setUp(self):
