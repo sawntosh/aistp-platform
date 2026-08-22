@@ -45,7 +45,7 @@ export default function AboutPage() {
       </section>
 
       <section className="mx-auto max-w-5xl px-4 py-16">
-        <h2 className="text-center text-2xl font-semibold text-gray-900">What we're built on</h2>
+        <h2 className="text-center text-2xl font-semibold text-gray-900">What we&apos;re built on</h2>
         <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-3">
           {VALUES.map((value) => (
             <div
@@ -68,7 +68,7 @@ export default function AboutPage() {
         <div className="rounded-2xl border border-gray-100 bg-gray-50 p-8">
           <h2 className="text-xl font-semibold text-gray-900">Why AISTP?</h2>
           <p className="mt-3 text-gray-600">
-            Studying for a certification exam alone can be overwhelming, especially when you don't know why an
+            Studying for a certification exam alone can be overwhelming, especially when you don&apos;t know why an
             answer is wrong. AISTP pairs targeted practice with an AI tutor that explains each concept as you go,
             and surfaces exactly which of the 6 CTFL domains need more attention, so every study session moves you
             closer to passing.
