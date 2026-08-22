@@ -8,7 +8,6 @@ Uses the same GROQ_API_KEY as services/question_generation_service.py
 app, instead of juggling separate systems/dashboards/quotas for each
 feature.
 """
-import json
 import os
 
 from groq import Groq
@@ -22,30 +21,13 @@ client = Groq(api_key=os.getenv("GROQ_API_KEY") or "not-configured")
 EXPLANATION_MODEL = os.getenv("EXPLANATION_GROQ_MODEL", "openai/gpt-oss-20b")
 
 # One retry absorbs transient hiccups (brief network blip, momentary rate
-# limit, malformed JSON) before the caller gives up and falls back to a
-# canned explanation.
+# limit) before the caller gives up and falls back to a canned explanation.
 EXPLANATION_MAX_ATTEMPTS = 2
 
 
 class ExplanationServiceError(Exception):
-    """Raised when the Groq API call fails, or returns no usable/parseable
-    explanation after all retry attempts are exhausted."""
-
-
-def _parse_explanation_payload(raw_text):
-    """Validate the shape the frontend renders: a list of per-option
-    verdicts plus a one-sentence summary. Raises ValueError/KeyError/
-    TypeError on anything that doesn't match -- callers treat that the
-    same as a failed API call and retry/fall back."""
-    parsed = json.loads(raw_text)
-    items = parsed["items"]
-    if not isinstance(items, list) or not items:
-        raise ValueError("'items' must be a non-empty list")
-    for item in items:
-        if not {"option", "correct", "reason"} <= item.keys():
-            raise ValueError("explanation item missing required keys")
-    parsed.setdefault("summary", "")
-    return parsed
+    """Raised when the Groq API call fails or returns no usable text
+    after all retry attempts are exhausted."""
 
 
 def _call_groq(prompt):
@@ -55,31 +37,25 @@ def _call_groq(prompt):
             response = client.chat.completions.create(
                 model=EXPLANATION_MODEL,
                 messages=[{"role": "user", "content": prompt}],
-                response_format={"type": "json_object"},
             )
         except Exception as exc:
             last_error = ExplanationServiceError(str(exc))
             continue
 
-        raw_text = (response.choices[0].message.content or "").strip()
-        if not raw_text:
-            last_error = ExplanationServiceError("Groq returned an empty response.")
-            continue
-
-        try:
-            return _parse_explanation_payload(raw_text)
-        except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
-            last_error = ExplanationServiceError(f"Groq returned malformed explanation JSON: {exc}")
+        explanation_text = (response.choices[0].message.content or "").strip()
+        if explanation_text:
+            return explanation_text
+        last_error = ExplanationServiceError("Groq returned an empty response.")
 
     raise last_error
 
 
 def generate_explanation(question_text, options, correct_options):
     """
-    Build a prompt from the question + options and call Groq. Returns a
-    dict shaped {"items": [{"option", "correct", "reason"}, ...],
-    "summary": str} so the frontend can render each option's verdict
-    individually instead of one blended paragraph.
+    Build a prompt from the question + options and call Groq. Returns
+    Groq's raw text response verbatim -- the caller stores/shows it as-is
+    rather than reshaping it, so what the learner sees is what the model
+    actually wrote.
 
     correct_options is a list -- most question types have exactly one
     correct option, but multi_select questions can have several.
@@ -96,17 +72,14 @@ def generate_explanation(question_text, options, correct_options):
         f"Question: {question_text}\n\n"
         f"Answer options:\n{options_block}\n\n"
         f"Correct answer(s): {correct_block}\n\n"
-        "Respond with ONLY a JSON object (no markdown, no code fences) in "
-        "exactly this shape:\n"
-        '{"items": [{"option": "<option text, copied verbatim>", '
-        '"correct": true or false, "reason": "<plain one-sentence reason>"}, '
-        '...], "summary": "<one sentence on why the correct answer is the '
-        'best choice overall>"}\n\n'
-        "Include exactly one item per answer option listed above, in the "
-        "same order, with the option text copied verbatim. Write each "
-        "reason as a natural, direct explanation of the testing concept "
-        "involved -- do not write phrases like 'ISTQB syllabus', 'the "
-        "syllabus says', or similar meta-references in the reason text."
+        "Write a clear, thorough explanation covering:\n"
+        "1. Why the correct answer is right.\n"
+        "2. Why each of the other options is wrong.\n"
+        "3. A short one-line summary or memory tip at the end.\n\n"
+        "Use plain text only -- no markdown symbols like ** or #. Use "
+        "short paragraphs and blank lines between sections so it stays "
+        "easy to read. Do not repeat the question verbatim, and do not "
+        "write phrases like 'ISTQB syllabus' or 'the syllabus says'."
     )
 
     return _call_groq(prompt)
@@ -115,20 +88,18 @@ def generate_explanation(question_text, options, correct_options):
 def build_fallback_explanation(options, correct_options):
     """
     Deterministic, non-AI explanation used when Groq is unavailable
-    (quota exhausted, network failure, malformed response) so the
-    learner still gets useful feedback instead of a bare error (NFR-02).
-    Same {"items", "summary"} shape as generate_explanation() -- lists
-    every option's correctness since there's no model available to
-    reason about *why*.
+    (quota exhausted, network failure, empty response) so the learner
+    still gets useful feedback instead of a bare error (NFR-02).
     """
     correct_set = set(correct_options)
-    return {
-        "items": [
-            {"option": option, "correct": option in correct_set, "reason": ""}
-            for option in options
-        ],
-        "summary": (
-            "An AI-generated explanation isn't available right now -- please "
-            "try again shortly for the reasoning behind each option."
-        ),
-    }
+    incorrect_options = [option for option in options if option not in correct_set]
+
+    sentences = [f"The correct answer is: {', '.join(correct_options)}."]
+    if incorrect_options:
+        sentences.append(
+            "The other option(s) (" + "; ".join(incorrect_options) + ") do not correctly answer this question."
+        )
+    sentences.append(
+        "An AI-generated explanation isn't available right now -- please try again shortly for a full breakdown."
+    )
+    return " ".join(sentences)

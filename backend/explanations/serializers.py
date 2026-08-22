@@ -24,16 +24,28 @@ class AIExplanationSerializer(serializers.ModelSerializer):
         fields = ("explanation", "is_fallback")
 
     def get_explanation(self, obj):
-        # explanation_text stores the {"items", "summary"} payload as JSON.
-        # Rows cached before this format existed hold plain text instead --
-        # degrade those into the same shape rather than erroring.
+        text = obj.explanation_text
+        # A short-lived earlier version of this feature cached explanations
+        # as {"items": [...], "summary": ...} JSON instead of plain text --
+        # flatten any such row back into readable text rather than showing
+        # a raw JSON blob to rows cached during that window.
         try:
-            parsed = json.loads(obj.explanation_text)
-            if isinstance(parsed, dict) and "items" in parsed:
-                return parsed
+            parsed = json.loads(text)
         except (ValueError, TypeError):
-            pass
-        return {"items": [], "summary": obj.explanation_text}
+            return text
+        if not isinstance(parsed, dict) or "items" not in parsed:
+            return text
+
+        lines = []
+        for item in parsed.get("items", []):
+            verdict = "Correct" if item.get("correct") else "Incorrect"
+            line = f"{item.get('option')}: {verdict}."
+            if item.get("reason"):
+                line += f" {item['reason']}"
+            lines.append(line)
+        if parsed.get("summary"):
+            lines.append(parsed["summary"])
+        return "\n".join(lines) if lines else text
 
     def get_is_fallback(self, obj):
         return False
