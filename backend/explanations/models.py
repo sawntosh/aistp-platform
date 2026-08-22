@@ -11,6 +11,13 @@ class AIExplanation(models.Model):
     question = models.OneToOneField(Question, on_delete=models.CASCADE, related_name="ai_explanation")
     explanation_text = models.TextField()
     generated_by_model = models.CharField(max_length=50, default="openai/gpt-oss-20b")
+    # sha256 fingerprint of (prompt version + question content) this
+    # explanation was generated for -- see explanations.views._context_hash.
+    # Lets a stale cached row (question text/options edited, or the AI
+    # prompt template itself changed) be detected and regenerated instead
+    # of served forever. Blank for rows cached before this field existed,
+    # which naturally never matches a freshly computed hash.
+    context_hash = models.CharField(max_length=64, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
