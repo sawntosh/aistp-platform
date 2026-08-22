@@ -5,7 +5,7 @@ from django.test import SimpleTestCase
 from django.urls import reverse
 from rest_framework.test import APITestCase
 
-from questions.models import AnswerOption, Domain, Question
+from questions.models import AnswerOption, Domain, FillBlankAnswer, MatchingPair, Question
 from services.explanation_service import ExplanationServiceError, build_fallback_explanation, generate_explanation
 
 from .models import AIExplanation
@@ -78,10 +78,57 @@ class ExplainViewTests(APITestCase):
 
         self.assertEqual(response.status_code, 401)
 
+    @patch("explanations.views.generate_explanation")
+    def test_explains_fill_blank_question(self, mock_generate):
+        mock_generate.return_value = "Acceptance testing checks the system against business needs."
+        domain = Domain.objects.create(name="Testing Throughout the SDLC")
+        question = Question.objects.create(
+            domain=domain,
+            text="_____ testing is typically the last test level performed before release.",
+            question_type=Question.QuestionType.FILL_BLANK,
+        )
+        FillBlankAnswer.objects.create(question=question, answer_text="Acceptance")
+
+        response = self.client.post(self.url, {"question_id": question.id}, format="json")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["explanation"], mock_generate.return_value)
+        prompt_block = mock_generate.call_args[0][1]
+        self.assertIn("Acceptance", prompt_block)
+
+    @patch("explanations.views.generate_explanation")
+    def test_explains_matching_question(self, mock_generate):
+        mock_generate.return_value = "Each lifecycle model pairs with its defining characteristic."
+        domain = Domain.objects.create(name="Testing Throughout the SDLC")
+        question = Question.objects.create(
+            domain=domain,
+            text="Match each model to its characteristic.",
+            question_type=Question.QuestionType.MATCHING,
+        )
+        MatchingPair.objects.create(question=question, prompt_text="V-model", match_text="Parallel test levels", order=0)
+        MatchingPair.objects.create(question=question, prompt_text="Agile", match_text="Time-boxed iterations", order=1)
+
+        response = self.client.post(self.url, {"question_id": question.id}, format="json")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["explanation"], mock_generate.return_value)
+        prompt_block = mock_generate.call_args[0][1]
+        self.assertIn("V-model -> Parallel test levels", prompt_block)
+
+    def test_fill_blank_question_without_answers_returns_422(self):
+        domain = Domain.objects.create(name="Testing Throughout the SDLC")
+        question = Question.objects.create(
+            domain=domain, text="_____ testing.", question_type=Question.QuestionType.FILL_BLANK
+        )
+
+        response = self.client.post(self.url, {"question_id": question.id}, format="json")
+
+        self.assertEqual(response.status_code, 422)
+
 
 class ExplanationServiceFallbackTests(SimpleTestCase):
     def test_build_fallback_explanation_names_correct_answer_and_flags_ai_unavailable(self):
-        text = build_fallback_explanation(["A flaw in the software", "A test case"], ["A flaw in the software"])
+        text = build_fallback_explanation("A flaw in the software")
 
         self.assertIn("A flaw in the software", text)
         self.assertIn("AI-generated explanation isn't available", text)
@@ -95,7 +142,7 @@ class ExplanationServiceFallbackTests(SimpleTestCase):
             success_response,
         ]
 
-        result = generate_explanation("What is a defect?", ["A flaw", "A test case"], ["A flaw"])
+        result = generate_explanation("What is a defect?", "Correct answer(s): A flaw")
 
         self.assertEqual(result, "A defect is a flaw that causes incorrect behaviour.")
         self.assertEqual(mock_client.chat.completions.create.call_count, 2)
@@ -105,4 +152,4 @@ class ExplanationServiceFallbackTests(SimpleTestCase):
         mock_client.chat.completions.create.side_effect = RuntimeError("still down")
 
         with self.assertRaises(ExplanationServiceError):
-            generate_explanation("What is a defect?", ["A flaw", "A test case"], ["A flaw"])
+            generate_explanation("What is a defect?", "Correct answer(s): A flaw")

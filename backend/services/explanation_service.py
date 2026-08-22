@@ -50,31 +50,33 @@ def _call_groq(prompt):
     raise last_error
 
 
-def generate_explanation(question_text, options, correct_options):
+def generate_explanation(question_text, answer_details_block):
     """
-    Build a prompt from the question + options and call Groq. Returns
-    Groq's raw text response verbatim -- the caller stores/shows it as-is
-    rather than reshaping it, so what the learner sees is what the model
-    actually wrote.
+    Build a prompt from the question + its answer details and call Groq.
+    Returns Groq's raw text response verbatim -- the caller stores/shows
+    it as-is rather than reshaping it, so what the learner sees is what
+    the model actually wrote.
 
-    correct_options is a list -- most question types have exactly one
-    correct option, but multi_select questions can have several.
+    answer_details_block is a pre-built plain-text description of the
+    question's correct answer(s) -- and, where applicable, its other
+    options/pairs -- shaped to the question's type by
+    explanations.views._build_answer_context(). This function stays
+    agnostic of question shape (MCQ vs fill-in-the-blank vs matching).
 
     Callers must check explanations.models.AIExplanation for a cached
     result before invoking this (T-08 DoS / quota countermeasure), and
     should fall back to build_fallback_explanation() if this raises.
     """
-    options_block = "\n".join(f"- {option}" for option in options)
-    correct_block = "; ".join(correct_options)
     prompt = (
         "You are an ISTQB CTFL v4.0 tutor helping a student understand a "
         "practice question they just answered.\n\n"
         f"Question: {question_text}\n\n"
-        f"Answer options:\n{options_block}\n\n"
-        f"Correct answer(s): {correct_block}\n\n"
+        f"{answer_details_block}\n\n"
         "Write a clear, thorough explanation covering:\n"
         "1. Why the correct answer is right.\n"
-        "2. Why each of the other options is wrong.\n"
+        "2. If other options or pairs are listed above, briefly explain "
+        "why each of the others is wrong (skip this step if there's "
+        "nothing else listed to compare against).\n"
         "3. A short one-line summary or memory tip at the end.\n\n"
         "Use plain text only -- no markdown symbols like ** or #. Use "
         "short paragraphs and blank lines between sections so it stays "
@@ -85,21 +87,17 @@ def generate_explanation(question_text, options, correct_options):
     return _call_groq(prompt)
 
 
-def build_fallback_explanation(options, correct_options):
+def build_fallback_explanation(correct_summary):
     """
     Deterministic, non-AI explanation used when Groq is unavailable
     (quota exhausted, network failure, empty response) so the learner
     still gets useful feedback instead of a bare error (NFR-02).
-    """
-    correct_set = set(correct_options)
-    incorrect_options = [option for option in options if option not in correct_set]
 
-    sentences = [f"The correct answer is: {', '.join(correct_options)}."]
-    if incorrect_options:
-        sentences.append(
-            "The other option(s) (" + "; ".join(incorrect_options) + ") do not correctly answer this question."
-        )
-    sentences.append(
+    correct_summary is the short human-readable statement of the correct
+    answer(s) built alongside the prompt block in
+    explanations.views._build_answer_context().
+    """
+    return (
+        f"The correct answer is: {correct_summary}. "
         "An AI-generated explanation isn't available right now -- please try again shortly for a full breakdown."
     )
-    return " ".join(sentences)
