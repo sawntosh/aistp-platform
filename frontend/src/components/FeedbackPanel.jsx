@@ -1,6 +1,34 @@
 import { useState } from "react";
 import { fetchExplanation } from "../services/explanationsService";
 
+function ExplanationOption({ option, correct, reason }) {
+  return (
+    <div
+      className={`flex items-start gap-2 rounded-lg border px-3 py-2 text-sm ${
+        correct ? "border-green-200 bg-green-50 text-green-900" : "border-red-200 bg-red-50 text-red-900"
+      }`}
+    >
+      {correct ? (
+        <svg viewBox="0 0 20 20" fill="currentColor" className="mt-0.5 h-4 w-4 shrink-0 text-green-600">
+          <path
+            fillRule="evenodd"
+            d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z"
+            clipRule="evenodd"
+          />
+        </svg>
+      ) : (
+        <svg viewBox="0 0 20 20" fill="currentColor" className="mt-0.5 h-4 w-4 shrink-0 text-red-500">
+          <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
+        </svg>
+      )}
+      <div>
+        <p className="font-medium">{option}</p>
+        {reason && <p className="mt-0.5 text-[13px] text-gray-700">{reason}</p>}
+      </div>
+    </div>
+  );
+}
+
 export default function FeedbackPanel({
   isCorrect,
   correctOptionText,
@@ -72,13 +100,20 @@ export default function FeedbackPanel({
         )}
         {explanationError && <p className="mt-2 text-sm text-red-600">{explanationError}</p>}
         {explanation && (
-          <div className="mt-2 rounded-lg bg-white border border-gray-200 p-3 text-sm text-gray-700">
+          <div className="mt-2 space-y-2">
             {isExplanationFallback && (
-              <p className="mb-1.5 text-xs font-medium text-amber-600">
+              <p className="text-xs font-medium text-amber-600">
                 AI tutor is temporarily unavailable — showing a basic explanation.
               </p>
             )}
-            {explanation}
+            {explanation.items?.map((item) => (
+              <ExplanationOption key={item.option} option={item.option} correct={item.correct} reason={item.reason} />
+            ))}
+            {explanation.summary && (
+              <p className="rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2 text-sm text-indigo-900">
+                {explanation.summary}
+              </p>
+            )}
           </div>
         )}
       </div>

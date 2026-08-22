@@ -2,6 +2,8 @@
 explanations/views.py -- FR-04: AI Explanation (Groq)
 Checks the AIExplanation cache before calling the Groq API.
 """
+import json
+
 from django.shortcuts import get_object_or_404
 from rest_framework import permissions, status
 from rest_framework.response import Response
@@ -36,36 +38,39 @@ class ExplainView(APIView):
             return Response(AIExplanationSerializer(cached).data)
 
         options = list(question.options.all())
-        correct_option = next((option for option in options if option.is_correct), None)
-        if correct_option is None:
+        correct_options = [option for option in options if option.is_correct]
+        if not correct_options:
             return Response(
                 {"detail": "This question has no correct answer configured."},
                 status=status.HTTP_422_UNPROCESSABLE_ENTITY,
             )
 
         try:
-            explanation_text = generate_explanation(
+            explanation_payload = generate_explanation(
                 question.text,
                 [option.text for option in options],
-                correct_option.text,
+                [option.text for option in correct_options],
             )
         except ExplanationServiceError:
-            # Groq is down/rate-limited/returned nothing: degrade to a
-            # canned explanation instead of failing the request outright
+            # Groq is down/rate-limited/returned malformed JSON: degrade to
+            # a canned explanation instead of failing the request outright
             # (NFR-02 availability). Not cached, so the next request for
             # this question retries Groq rather than being stuck with
             # the fallback text forever.
-            fallback_text = build_fallback_explanation(
+            fallback_payload = build_fallback_explanation(
                 [option.text for option in options],
-                correct_option.text,
+                [option.text for option in correct_options],
             )
-            return Response({"explanation": fallback_text, "is_fallback": True})
+            return Response({"explanation": fallback_payload, "is_fallback": True})
 
         # get_or_create guards against a duplicate-key race if two requests
         # for the same (uncached) question land concurrently.
         explanation, _ = AIExplanation.objects.get_or_create(
             question=question,
-            defaults={"explanation_text": explanation_text, "generated_by_model": EXPLANATION_MODEL},
+            defaults={
+                "explanation_text": json.dumps(explanation_payload),
+                "generated_by_model": EXPLANATION_MODEL,
+            },
         )
 
         return Response(AIExplanationSerializer(explanation).data)
