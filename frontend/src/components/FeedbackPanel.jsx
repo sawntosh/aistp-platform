@@ -79,11 +79,17 @@ function parseExplanationBlocks(text) {
     flushTable();
 
     const boldHeadingMatch = /^\*\*(.+)\*\*$/.exec(line);
-    const hashHeadingMatch = /^#{1,6}\s+(.+)$/.exec(line);
+    const hashHeadingMatch = /^(#{1,6})\s+(.+)$/.exec(line);
     if (boldHeadingMatch || hashHeadingMatch) {
       flushParagraph();
       flushList();
-      blocks.push({ type: "heading", text: (boldHeadingMatch || hashHeadingMatch)[1].trim() });
+      // "## " (section, e.g. "Correct Answer") vs "### " (per-option
+      // subsection inside the "other options" section) -- a bare
+      // **bold** line defaults to a level-2 section for backward
+      // compatibility with explanations cached before this format.
+      const level = hashHeadingMatch ? hashHeadingMatch[1].length : 2;
+      const headingText = hashHeadingMatch ? hashHeadingMatch[2] : boldHeadingMatch[1];
+      blocks.push({ type: "heading", level, text: headingText.trim() });
       continue;
     }
 
@@ -130,76 +136,172 @@ function renderInline(text, keyPrefix) {
   });
 }
 
-function ExplanationText({ text }) {
-  return (
-    <div className="space-y-2">
-      {parseExplanationBlocks(text).map((block, i) => {
-        if (block.type === "heading") {
-          return (
-            <p key={i} className="text-sm font-semibold text-gray-900">
-              {renderInline(block.text, `${i}`)}
-            </p>
-          );
-        }
-        if (block.type === "ul") {
-          return (
-            <ul key={i} className="list-disc space-y-1 pl-5">
-              {block.items.map((item, j) => (
-                <li key={j} className="text-sm text-gray-700">
-                  {renderInline(item, `${i}-${j}`)}
-                </li>
-              ))}
-            </ul>
-          );
-        }
-        if (block.type === "ol") {
-          return (
-            <ol key={i} className="list-decimal space-y-1 pl-5">
-              {block.items.map((item, j) => (
-                <li key={j} className="text-sm text-gray-700">
-                  {renderInline(item, `${i}-${j}`)}
-                </li>
-              ))}
-            </ol>
-          );
-        }
-        if (block.type === "table") {
-          return (
-            <div key={i} className="overflow-x-auto rounded-md border border-gray-200">
-              <table className="w-full border-collapse text-sm">
-                {block.header && (
-                  <thead>
-                    <tr className="bg-gray-50">
-                      {block.header.map((cell, c) => (
-                        <th
-                          key={c}
-                          className="border-b border-gray-200 px-2.5 py-1.5 text-left font-semibold text-gray-900"
-                        >
-                          {renderInline(cell, `${i}-h-${c}`)}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                )}
-                <tbody>
-                  {block.rows.map((row, r) => (
-                    <tr key={r}>
-                      {row.map((cell, c) => (
-                        <td key={c} className="border-b border-gray-100 px-2.5 py-1.5 align-top text-gray-700">
-                          {renderInline(cell, `${i}-${r}-${c}`)}
-                        </td>
-                      ))}
-                    </tr>
+// Renders a run of non-heading blocks (paragraphs/lists/tables) -- shared
+// by both a top-level section's own content and a per-option subsection's
+// content nested inside it.
+function renderBlocks(blocks, keyPrefix) {
+  return blocks.map((block, i) => {
+    const key = `${keyPrefix}-${i}`;
+    if (block.type === "ul") {
+      return (
+        <ul key={key} className="list-disc space-y-1 pl-5">
+          {block.items.map((item, j) => (
+            <li key={j} className="text-sm leading-relaxed text-gray-700">
+              {renderInline(item, `${key}-${j}`)}
+            </li>
+          ))}
+        </ul>
+      );
+    }
+    if (block.type === "ol") {
+      return (
+        <ol key={key} className="list-decimal space-y-1 pl-5">
+          {block.items.map((item, j) => (
+            <li key={j} className="text-sm leading-relaxed text-gray-700">
+              {renderInline(item, `${key}-${j}`)}
+            </li>
+          ))}
+        </ol>
+      );
+    }
+    if (block.type === "table") {
+      return (
+        <div key={key} className="overflow-x-auto rounded-md border border-gray-200">
+          <table className="w-full border-collapse text-sm">
+            {block.header && (
+              <thead>
+                <tr className="bg-gray-50">
+                  {block.header.map((cell, c) => (
+                    <th
+                      key={c}
+                      className="border-b border-gray-200 px-2.5 py-1.5 text-left font-semibold text-gray-900"
+                    >
+                      {renderInline(cell, `${key}-h-${c}`)}
+                    </th>
                   ))}
-                </tbody>
-              </table>
+                </tr>
+              </thead>
+            )}
+            <tbody>
+              {block.rows.map((row, r) => (
+                <tr key={r}>
+                  {row.map((cell, c) => (
+                    <td key={c} className="border-b border-gray-100 px-2.5 py-1.5 align-top text-gray-700">
+                      {renderInline(cell, `${key}-${r}-${c}`)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+    return (
+      <p key={key} className="text-sm leading-relaxed text-gray-700">
+        {renderInline(block.text, key)}
+      </p>
+    );
+  });
+}
+
+// Groups the flat block list into sections: a level-2 heading ("## ...")
+// starts a new section, a level-3 heading ("### ...") starts a
+// subsection nested inside the current section -- this is how "Why Are
+// the Other Options Incorrect?" ends up with one subsection per option.
+// Content before any heading (old cached explanations, or the fallback
+// text) becomes a single headless section, rendered plainly.
+function groupSections(blocks) {
+  const sections = [];
+  let currentSection = null;
+  let currentSubsection = null;
+
+  const ensureSection = () => {
+    if (!currentSection) {
+      currentSection = { heading: null, blocks: [], subsections: [] };
+      sections.push(currentSection);
+    }
+    return currentSection;
+  };
+
+  for (const block of blocks) {
+    if (block.type === "heading" && block.level <= 2) {
+      currentSection = { heading: block.text, blocks: [], subsections: [] };
+      currentSubsection = null;
+      sections.push(currentSection);
+      continue;
+    }
+    if (block.type === "heading") {
+      currentSubsection = { heading: block.text, blocks: [] };
+      ensureSection().subsections.push(currentSubsection);
+      continue;
+    }
+    if (currentSubsection) {
+      currentSubsection.blocks.push(block);
+    } else {
+      ensureSection().blocks.push(block);
+    }
+  }
+  return sections;
+}
+
+function classifySection(heading) {
+  if (!heading) return "plain";
+  if (/correct answer/i.test(heading)) return "correct";
+  if (/exam tip/i.test(heading)) return "examTip";
+  if (/key concept/i.test(heading)) return "keyConcept";
+  return "plain";
+}
+
+function ExplanationText({ text }) {
+  const sections = groupSections(parseExplanationBlocks(text));
+
+  return (
+    <div className="space-y-5">
+      {sections.map((section, i) => {
+        const kind = classifySection(section.heading);
+        const key = `sec-${i}`;
+
+        if (kind === "correct") {
+          return (
+            <div key={key} className="rounded-lg border border-green-200 bg-green-50 px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-green-700">{section.heading}</p>
+              <div className="mt-1 text-[15px] font-medium text-green-900">{renderBlocks(section.blocks, key)}</div>
             </div>
           );
         }
+
+        if (kind === "examTip" || kind === "keyConcept") {
+          const isExamTip = kind === "examTip";
+          return (
+            <div key={key} className={`border-l-2 pl-3 ${isExamTip ? "border-indigo-300" : "border-gray-300"}`}>
+              <p
+                className={`text-xs font-semibold uppercase tracking-wide ${
+                  isExamTip ? "text-indigo-700" : "text-gray-500"
+                }`}
+              >
+                {section.heading}
+              </p>
+              <div className="mt-1 space-y-2">{renderBlocks(section.blocks, key)}</div>
+            </div>
+          );
+        }
+
         return (
-          <p key={i} className="text-sm text-gray-700">
-            {renderInline(block.text, `${i}`)}
-          </p>
+          <div key={key}>
+            {section.heading && <h3 className="mb-1.5 text-sm font-semibold text-gray-900">{section.heading}</h3>}
+            <div className="space-y-2">{renderBlocks(section.blocks, key)}</div>
+            {section.subsections.length > 0 && (
+              <div className="mt-3 space-y-2">
+                {section.subsections.map((sub, j) => (
+                  <div key={`${key}-sub-${j}`} className="rounded-md border border-red-100 bg-red-50/70 px-3 py-2">
+                    <p className="text-sm font-semibold text-red-800">{renderInline(sub.heading, `${key}-sub-${j}-h`)}</p>
+                    <div className="mt-1 space-y-1.5">{renderBlocks(sub.blocks, `${key}-sub-${j}`)}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         );
       })}
     </div>
