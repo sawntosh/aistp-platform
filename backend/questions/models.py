@@ -133,6 +133,9 @@ class GenerationJob(models.Model):
     source_file = models.FileField(upload_to="generation_uploads/")
     source_filename = models.CharField(max_length=255)
     question_types = models.JSONField(default=list)
+    # Which of the 6 syllabus domains to generate for; empty list means
+    # all of them (see question_generation_service.DOMAIN_TITLES).
+    domain_names = models.JSONField(default=list, blank=True)
     target_per_domain = models.PositiveIntegerField(default=10)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
     progress = models.JSONField(default=dict, blank=True)

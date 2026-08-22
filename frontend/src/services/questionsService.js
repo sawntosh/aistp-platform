@@ -58,9 +58,10 @@ export async function deleteQuestion(id) {
 
 // -- Admin: bulk JSON import -------------------------------------------------
 
-export async function importQuestionsFile(file) {
+export async function importQuestionsFile(file, domainId = null) {
   const formData = new FormData();
   formData.append("file", file);
+  if (domainId) formData.append("domain_id", String(domainId));
   return apiFetch("/questions/admin/questions/import/", {
     method: "POST",
     body: formData,
@@ -69,11 +70,12 @@ export async function importQuestionsFile(file) {
 
 // -- Admin: RAG generation from an uploaded PDF/DOCX -------------------------
 
-export async function generateQuestionsFromFile(file, { questionTypes = [], targetPerDomain = 10 } = {}) {
+export async function generateQuestionsFromFile(file, { questionTypes = [], domains = [], targetPerDomain = 10 } = {}) {
   const formData = new FormData();
   formData.append("file", file);
   formData.append("target_per_domain", String(targetPerDomain));
   questionTypes.forEach((type) => formData.append("question_types", type));
+  domains.forEach((name) => formData.append("domains", name));
   return apiFetch("/questions/admin/generate/", {
     method: "POST",
     body: formData,
