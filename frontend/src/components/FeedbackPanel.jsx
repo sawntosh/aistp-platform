@@ -2,14 +2,18 @@ import { useState } from "react";
 import { fetchExplanation } from "../services/explanationsService";
 
 // Parses the lightweight markdown subset the AI explanation prompt asks
-// for: **bold** section labels on their own line, "- " bullet lines, and
-// blank lines separating paragraphs. Deliberately not a full markdown
-// renderer -- just enough structure to read the AI tutor's answer as
-// headings/bullets/paragraphs instead of one flat wall of text.
+// for: **bold** section labels on their own line (or a leading #/##
+// heading, tolerated as a safety net even though the prompt discourages
+// it), "- "/"* " bullet lines, "1. " numbered lines, and blank lines
+// separating paragraphs. Deliberately not a full markdown renderer --
+// just enough structure to read the AI tutor's answer as
+// headings/bullets/numbered-steps/paragraphs instead of one flat wall of
+// text, while staying simple enough to render safely (see renderInline).
 function parseExplanationBlocks(text) {
   const blocks = [];
   let paragraphLines = [];
   let listItems = [];
+  let listType = null; // "ul" | "ol"
 
   const flushParagraph = () => {
     if (paragraphLines.length) {
@@ -19,9 +23,10 @@ function parseExplanationBlocks(text) {
   };
   const flushList = () => {
     if (listItems.length) {
-      blocks.push({ type: "ul", items: listItems });
+      blocks.push({ type: listType, items: listItems });
       listItems = [];
     }
+    listType = null;
   };
 
   for (const rawLine of text.replace(/\r\n/g, "\n").split("\n")) {
@@ -31,18 +36,34 @@ function parseExplanationBlocks(text) {
       flushList();
       continue;
     }
-    const headingMatch = /^\*\*(.+)\*\*$/.exec(line);
-    if (headingMatch) {
+
+    const boldHeadingMatch = /^\*\*(.+)\*\*$/.exec(line);
+    const hashHeadingMatch = /^#{1,6}\s+(.+)$/.exec(line);
+    if (boldHeadingMatch || hashHeadingMatch) {
       flushParagraph();
       flushList();
-      blocks.push({ type: "heading", text: headingMatch[1] });
+      blocks.push({ type: "heading", text: (boldHeadingMatch || hashHeadingMatch)[1].trim() });
       continue;
     }
-    if (line.startsWith("- ")) {
+
+    const bulletMatch = /^[-*]\s+(.*)$/.exec(line);
+    if (bulletMatch) {
       flushParagraph();
-      listItems.push(line.slice(2).trim());
+      if (listType && listType !== "ul") flushList();
+      listType = "ul";
+      listItems.push(bulletMatch[1]);
       continue;
     }
+
+    const numberedMatch = /^\d+[.)]\s+(.*)$/.exec(line);
+    if (numberedMatch) {
+      flushParagraph();
+      if (listType && listType !== "ol") flushList();
+      listType = "ol";
+      listItems.push(numberedMatch[1]);
+      continue;
+    }
+
     flushList();
     paragraphLines.push(line);
   }
@@ -70,7 +91,7 @@ function ExplanationText({ text }) {
         if (block.type === "heading") {
           return (
             <p key={i} className="text-sm font-semibold text-gray-900">
-              {block.text}
+              {renderInline(block.text, `${i}`)}
             </p>
           );
         }
@@ -83,6 +104,17 @@ function ExplanationText({ text }) {
                 </li>
               ))}
             </ul>
+          );
+        }
+        if (block.type === "ol") {
+          return (
+            <ol key={i} className="list-decimal space-y-1 pl-5">
+              {block.items.map((item, j) => (
+                <li key={j} className="text-sm text-gray-700">
+                  {renderInline(item, `${i}-${j}`)}
+                </li>
+              ))}
+            </ol>
           );
         }
         return (

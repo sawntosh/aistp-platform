@@ -2,6 +2,9 @@
 explanations/views.py -- FR-04: AI Explanation (Groq)
 Checks the AIExplanation cache before calling the Groq API.
 """
+import hashlib
+
+from django.db import connection, transaction
 from django.shortcuts import get_object_or_404
 from rest_framework import permissions, status
 from rest_framework.response import Response
@@ -10,6 +13,7 @@ from rest_framework.views import APIView
 from questions.models import Question
 from services.explanation_service import (
     EXPLANATION_MODEL,
+    PROMPT_VERSION,
     ExplanationServiceError,
     build_fallback_explanation,
     generate_explanation,
@@ -69,6 +73,17 @@ def _build_answer_context(question):
     return None
 
 
+def _context_hash(question, prompt_block):
+    """Fingerprints everything that should invalidate a cached explanation:
+    the prompt template version plus the question's own content. If an
+    admin edits the question text/options/pairs, or the AI prompt itself
+    changes (PROMPT_VERSION bump in explanation_service.py), the hash
+    changes and the next request regenerates instead of serving stale
+    cached text forever."""
+    raw = "|".join([PROMPT_VERSION, question.question_type, question.text, prompt_block])
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
 class ExplainView(APIView):
     """Rate-limited (T-08 countermeasure) -- throttle_scope='explain'."""
     permission_classes = [permissions.IsAuthenticated]
@@ -81,10 +96,6 @@ class ExplainView(APIView):
 
         question = get_object_or_404(Question, pk=question_id, is_active=True)
 
-        cached = AIExplanation.objects.filter(question=question).first()
-        if cached:
-            return Response(AIExplanationSerializer(cached).data)
-
         answer_context = _build_answer_context(question)
         if answer_context is None:
             return Response(
@@ -92,22 +103,52 @@ class ExplainView(APIView):
                 status=status.HTTP_422_UNPROCESSABLE_ENTITY,
             )
 
-        try:
-            explanation_text = generate_explanation(question.text, answer_context["prompt_block"])
-        except ExplanationServiceError:
-            # Groq is down/rate-limited/returned nothing: degrade to a
-            # canned explanation instead of failing the request outright
-            # (NFR-02 availability). Not cached, so the next request for
-            # this question retries Groq rather than being stuck with
-            # the fallback text forever.
-            fallback_text = build_fallback_explanation(answer_context["correct_summary"])
-            return Response({"explanation": fallback_text, "is_fallback": True})
+        context_hash = _context_hash(question, answer_context["prompt_block"])
 
-        # get_or_create guards against a duplicate-key race if two requests
-        # for the same (uncached) question land concurrently.
-        explanation, _ = AIExplanation.objects.get_or_create(
-            question=question,
-            defaults={"explanation_text": explanation_text, "generated_by_model": EXPLANATION_MODEL},
-        )
+        cached = AIExplanation.objects.filter(question=question, context_hash=context_hash).first()
+        if cached:
+            return Response(AIExplanationSerializer(cached).data)
+
+        # Cold or stale cache: serialize concurrent requests for the same
+        # question behind a per-question Postgres advisory lock so a burst
+        # of clicks on one uncached question doesn't fan out into several
+        # duplicate Groq calls (T-08). No-ops on non-Postgres backends
+        # (e.g. sqlite in some local setups) -- duplicate calls are still
+        # possible there, just not prevented.
+        with transaction.atomic():
+            if connection.vendor == "postgresql":
+                with connection.cursor() as cursor:
+                    cursor.execute("SELECT pg_advisory_xact_lock(%s)", [question.id])
+
+            # Re-check now that we (may) hold the lock -- another request
+            # could have just filled the cache while we were waiting on it.
+            cached = AIExplanation.objects.filter(question=question, context_hash=context_hash).first()
+            if cached:
+                return Response(AIExplanationSerializer(cached).data)
+
+            try:
+                explanation_text = generate_explanation(
+                    question.text, question.question_type, answer_context["prompt_block"]
+                )
+            except ExplanationServiceError:
+                # Groq is down/rate-limited/returned nothing: degrade to a
+                # canned explanation instead of failing the request outright
+                # (NFR-02 availability). Not cached, so the next request for
+                # this question retries Groq rather than being stuck with
+                # the fallback text forever.
+                fallback_text = build_fallback_explanation(answer_context["correct_summary"])
+                return Response({"explanation": fallback_text, "is_fallback": True})
+
+            # update_or_create, not get_or_create: a stale row may already
+            # exist for this question with an old context_hash -- overwrite
+            # it rather than leaving it stuck on outdated content.
+            explanation, _ = AIExplanation.objects.update_or_create(
+                question=question,
+                defaults={
+                    "explanation_text": explanation_text,
+                    "generated_by_model": EXPLANATION_MODEL,
+                    "context_hash": context_hash,
+                },
+            )
 
         return Response(AIExplanationSerializer(explanation).data)
