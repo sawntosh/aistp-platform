@@ -36,6 +36,15 @@ export function setUnauthorizedHandler(handler) {
 }
 
 async function rawRequest(path, options) {
+  // Without this, a missing NEXT_PUBLIC_API_BASE_URL silently turns into a
+  // relative fetch that hits the Next.js server itself (404s with no JSON
+  // body) instead of the Django API, masking the real misconfiguration.
+  if (!API_BASE_URL) {
+    throw new Error(
+      "NEXT_PUBLIC_API_BASE_URL is not set. Copy frontend/.env.local.example to frontend/.env.local, then restart `npm run dev`."
+    );
+  }
+
   // Skip the default JSON header for FormData bodies (file uploads) so the
   // browser can set its own multipart Content-Type with the boundary.
   const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;

@@ -2,6 +2,7 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from .views import (
+    AdminGenerationJobViewSet,
     AdminQuestionViewSet,
     AnswerSubmitView,
     DomainListView,
@@ -11,6 +12,7 @@ from .views import (
 
 router = DefaultRouter()
 router.register("admin/questions", AdminQuestionViewSet, basename="admin-question")
+router.register("admin/generate", AdminGenerationJobViewSet, basename="admin-generation-job")
 
 urlpatterns = [
     path("", QuestionListView.as_view(), name="question-list"),
