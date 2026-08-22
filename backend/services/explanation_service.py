@@ -99,12 +99,14 @@ def generate_explanation(question_text, options, correct_options):
         "Respond with ONLY a JSON object (no markdown, no code fences) in "
         "exactly this shape:\n"
         '{"items": [{"option": "<option text, copied verbatim>", '
-        '"correct": true or false, "reason": "<one sentence grounded in the '
-        'ISTQB syllabus concept this option tests>"}, ...], '
-        '"summary": "<one sentence on why the correct answer is the best '
-        'choice overall>"}\n\n'
+        '"correct": true or false, "reason": "<plain one-sentence reason>"}, '
+        '...], "summary": "<one sentence on why the correct answer is the '
+        'best choice overall>"}\n\n'
         "Include exactly one item per answer option listed above, in the "
-        "same order, with the option text copied verbatim."
+        "same order, with the option text copied verbatim. Write each "
+        "reason as a natural, direct explanation of the testing concept "
+        "involved -- do not write phrases like 'ISTQB syllabus', 'the "
+        "syllabus says', or similar meta-references in the reason text."
     )
 
     return _call_groq(prompt)
