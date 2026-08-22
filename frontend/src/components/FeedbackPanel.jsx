@@ -1,6 +1,100 @@
 import { useState } from "react";
 import { fetchExplanation } from "../services/explanationsService";
 
+// Parses the lightweight markdown subset the AI explanation prompt asks
+// for: **bold** section labels on their own line, "- " bullet lines, and
+// blank lines separating paragraphs. Deliberately not a full markdown
+// renderer -- just enough structure to read the AI tutor's answer as
+// headings/bullets/paragraphs instead of one flat wall of text.
+function parseExplanationBlocks(text) {
+  const blocks = [];
+  let paragraphLines = [];
+  let listItems = [];
+
+  const flushParagraph = () => {
+    if (paragraphLines.length) {
+      blocks.push({ type: "p", text: paragraphLines.join(" ") });
+      paragraphLines = [];
+    }
+  };
+  const flushList = () => {
+    if (listItems.length) {
+      blocks.push({ type: "ul", items: listItems });
+      listItems = [];
+    }
+  };
+
+  for (const rawLine of text.replace(/\r\n/g, "\n").split("\n")) {
+    const line = rawLine.trim();
+    if (!line) {
+      flushParagraph();
+      flushList();
+      continue;
+    }
+    const headingMatch = /^\*\*(.+)\*\*$/.exec(line);
+    if (headingMatch) {
+      flushParagraph();
+      flushList();
+      blocks.push({ type: "heading", text: headingMatch[1] });
+      continue;
+    }
+    if (line.startsWith("- ")) {
+      flushParagraph();
+      listItems.push(line.slice(2).trim());
+      continue;
+    }
+    flushList();
+    paragraphLines.push(line);
+  }
+  flushParagraph();
+  flushList();
+  return blocks;
+}
+
+// Renders inline **bold** spans within a line as real elements (never
+// dangerouslySetInnerHTML) so arbitrary AI-generated text can't inject markup.
+function renderInline(text, keyPrefix) {
+  return text.split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
+    part.startsWith("**") && part.endsWith("**") ? (
+      <strong key={`${keyPrefix}-${i}`}>{part.slice(2, -2)}</strong>
+    ) : (
+      <span key={`${keyPrefix}-${i}`}>{part}</span>
+    )
+  );
+}
+
+function ExplanationText({ text }) {
+  return (
+    <div className="space-y-2">
+      {parseExplanationBlocks(text).map((block, i) => {
+        if (block.type === "heading") {
+          return (
+            <p key={i} className="text-sm font-semibold text-gray-900">
+              {block.text}
+            </p>
+          );
+        }
+        if (block.type === "ul") {
+          return (
+            <ul key={i} className="list-disc space-y-1 pl-5">
+              {block.items.map((item, j) => (
+                <li key={j} className="text-sm text-gray-700">
+                  {renderInline(item, `${i}-${j}`)}
+                </li>
+              ))}
+            </ul>
+          );
+        }
+        return (
+          <p key={i} className="text-sm text-gray-700">
+            {renderInline(block.text, `${i}`)}
+          </p>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function FeedbackPanel({
   isCorrect,
   correctOptionText,
@@ -72,13 +166,13 @@ export default function FeedbackPanel({
         )}
         {explanationError && <p className="mt-2 text-sm text-red-600">{explanationError}</p>}
         {explanation && (
-          <div className="mt-2 rounded-lg bg-white border border-gray-200 p-3 text-sm text-gray-700">
+          <div className="mt-2 rounded-lg bg-white border border-gray-200 p-3">
             {isExplanationFallback && (
               <p className="mb-1.5 text-xs font-medium text-amber-600">
                 AI tutor is temporarily unavailable — showing a basic explanation.
               </p>
             )}
-            <p className="whitespace-pre-line">{explanation}</p>
+            <ExplanationText text={explanation} />
           </div>
         )}
       </div>
