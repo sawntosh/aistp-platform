@@ -1,13 +1,20 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import Link from "next/link";
+import { Circle, CircleDot, CheckCircle2 } from "lucide-react";
 import { useAuth } from "../../../context/AuthContext";
 import { fetchStudyTopics } from "../../../services/studyService";
+import PageHeader from "../../../components/ui/PageHeader";
+import Skeleton from "../../../components/ui/Skeleton";
+import ErrorState from "../../../components/ui/ErrorState";
+import EmptyState from "../../../components/ui/EmptyState";
+import Badge from "../../../components/ui/Badge";
+import { cn } from "../../../lib/cn";
 
-const STATUS_STYLE = {
-  not_started: { label: "Not started", className: "bg-gray-100 text-gray-500" },
-  in_progress: { label: "In progress", className: "bg-indigo-50 text-indigo-700" },
-  completed: { label: "Completed", className: "bg-emerald-50 text-emerald-700" },
+const STATUS_CONFIG = {
+  not_started: { label: "Not started", tone: "default", icon: Circle },
+  in_progress: { label: "In progress", tone: "study", icon: CircleDot },
+  completed: { label: "Completed", tone: "success", icon: CheckCircle2 },
 };
 
 export default function StudyDomainTopicsPage() {
@@ -42,46 +49,41 @@ export default function StudyDomainTopicsPage() {
   if (isAuthLoading || !user) return null;
 
   return (
-    <div className="min-h-[calc(100vh-49px)] bg-gray-50 px-4 py-10">
+    <div className="min-h-[calc(100vh-57px)] bg-background px-4 py-10 sm:px-6">
       <div className="mx-auto max-w-2xl">
-        <Link href="/study" className="text-sm font-medium text-gray-500 hover:text-gray-900">
-          ← Study
-        </Link>
-
         {data === null && !loadError && (
-          <div className="mt-6 space-y-3" aria-busy="true" aria-label="Loading topics">
+          <div className="space-y-3" aria-busy="true" aria-label="Loading topics">
+            <Skeleton className="mb-6 h-9 w-64" />
             {[0, 1, 2, 3, 4].map((i) => (
-              <div key={i} className="h-16 animate-pulse rounded-xl border border-gray-100 bg-gray-100" />
+              <Skeleton key={i} className="h-[72px] w-full" />
             ))}
           </div>
         )}
 
         {loadError && (
-          <div className="mt-6 rounded-xl border border-red-200 bg-red-50 p-6 text-center">
-            <p className="text-sm text-red-700">{loadError}</p>
-            <button
-              type="button"
-              onClick={loadTopics}
-              className="mt-3 rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-500 active:scale-[0.98]"
-            >
-              Try again
-            </button>
-          </div>
+          <>
+            <PageHeader backHref="/study" backLabel="Study" title="Topics" />
+            <ErrorState description={loadError} onRetry={loadTopics} />
+          </>
         )}
 
         {data && (
           <>
-            <h1 className="mt-3 text-2xl font-semibold text-gray-900">{data.domain.name}</h1>
-            <p className="mt-1 text-sm text-gray-500">Choose a topic to start learning.</p>
+            <PageHeader
+              backHref="/study"
+              backLabel="Study"
+              eyebrow={data.domain.name}
+              title="Choose a topic"
+              description="Pick a topic to start learning."
+            />
 
             {data.topics.length === 0 ? (
-              <p className="mt-6 rounded-xl border border-gray-200 bg-white p-6 text-center text-sm text-gray-500">
-                No topics are available for this domain yet.
-              </p>
+              <EmptyState title="No topics yet" description="Topics for this domain will appear here once they're available." />
             ) : (
-              <ul className="mt-6 space-y-3">
+              <ul className="space-y-3">
                 {data.topics.map((topic) => {
-                  const status = STATUS_STYLE[topic.status] ?? STATUS_STYLE.not_started;
+                  const status = STATUS_CONFIG[topic.status] ?? STATUS_CONFIG.not_started;
+                  const StatusIcon = status.icon;
                   const disabled = !topic.has_content;
                   return (
                     <li key={topic.id}>
@@ -91,28 +93,26 @@ export default function StudyDomainTopicsPage() {
                         onClick={(event) => {
                           if (disabled) event.preventDefault();
                         }}
-                        className={`flex items-center justify-between gap-4 rounded-xl border-2 p-4 transition-all ${
-                          disabled
-                            ? "cursor-not-allowed border-gray-100 bg-gray-50 opacity-60"
-                            : "border-gray-200 bg-white hover:border-indigo-300 hover:shadow-sm active:scale-[0.99]"
-                        }`}
+                        className={cn(
+                          "flex items-center justify-between gap-4 rounded-lg border border-border bg-surface p-4 transition-all duration-150",
+                          disabled ? "cursor-not-allowed opacity-50" : "hover:border-study/40 hover:shadow-sm"
+                        )}
                       >
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold text-gray-900">{topic.title}</p>
-                          {topic.description && <p className="mt-0.5 truncate text-xs text-gray-500">{topic.description}</p>}
-                          {!disabled && (
-                            <p className="mt-1 text-xs text-gray-400">
-                              {topic.question_count} practice question{topic.question_count === 1 ? "" : "s"}
-                            </p>
-                          )}
+                        <div className="flex min-w-0 items-center gap-3">
+                          {!disabled && <StatusIcon className="h-4 w-4 shrink-0 text-text-muted" aria-hidden="true" />}
+                          <div className="min-w-0">
+                            <p className="truncate text-body font-semibold text-text-primary">{topic.title}</p>
+                            {topic.description && <p className="mt-0.5 truncate text-body-sm text-text-muted">{topic.description}</p>}
+                            {!disabled && (
+                              <p className="mt-1 text-caption text-text-muted">
+                                {topic.question_count} practice question{topic.question_count === 1 ? "" : "s"}
+                              </p>
+                            )}
+                          </div>
                         </div>
-                        <span
-                          className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${
-                            disabled ? "bg-gray-100 text-gray-400" : status.className
-                          }`}
-                        >
+                        <Badge tone={disabled ? "default" : status.tone} className="shrink-0">
                           {disabled ? "Coming soon" : status.label}
-                        </span>
+                        </Badge>
                       </Link>
                     </li>
                   );

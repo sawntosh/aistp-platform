@@ -1,40 +1,44 @@
 import Link from "next/link";
+import { ArrowLeft, CheckCircle2 } from "lucide-react";
+import Button from "./ui/Button";
+import { Card } from "./ui/Card";
 
-export default function StudyCompletion({ domainName, topicTitle, domainId, questionsAnswered, nextTopic }) {
+export default function StudyCompletion({ domainName, topicTitle, questionsAnswered, nextTopic }) {
   return (
     <div className="flex flex-1 flex-col items-center justify-center px-4 py-16 text-center">
-      <h2 className="text-2xl font-semibold text-gray-900">Study session complete 🎉</h2>
+      <span className="flex h-14 w-14 items-center justify-center rounded-full bg-success-muted text-success" aria-hidden="true">
+        <CheckCircle2 className="h-7 w-7" />
+      </span>
+      <h2 className="mt-4 text-h1 text-text-primary">Lesson complete</h2>
 
-      <div className="mt-4 max-w-sm rounded-xl border border-gray-200 bg-white p-5">
-        <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">You&apos;ve finished</p>
-        <p className="mt-1 text-sm text-gray-500">{domainName}</p>
-        <p className="text-base font-semibold text-gray-900">{topicTitle}</p>
-      </div>
+      <Card className="mt-5 w-full max-w-sm p-5 text-left">
+        <p className="text-label uppercase tracking-wide text-text-muted">You&apos;ve reviewed</p>
+        <p className="mt-1 text-body-sm text-text-muted">{domainName}</p>
+        <p className="text-body font-semibold text-text-primary">{topicTitle}</p>
+      </Card>
 
-      <p className="mt-4 max-w-sm text-sm text-gray-600">
-        You&apos;ve reviewed the key concepts and reinforced your understanding with practice questions.
+      <p className="mt-4 max-w-sm text-body text-text-muted">
+        You&apos;ve reviewed the key concepts and completed the knowledge check.
       </p>
       {questionsAnswered > 0 && (
-        <p className="mt-1 text-xs text-gray-400">
-          You completed {questionsAnswered} learning question{questionsAnswered === 1 ? "" : "s"}.
+        <p className="mt-1 text-caption text-text-muted">
+          {questionsAnswered} learning question{questionsAnswered === 1 ? "" : "s"} completed.
         </p>
       )}
 
       {nextTopic && (
-        <div className="mt-6 w-full max-w-sm rounded-xl border border-indigo-100 bg-indigo-50 p-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-indigo-500">Next recommended topic</p>
-          <p className="mt-1 text-sm font-semibold text-indigo-900">{nextTopic.title}</p>
-          <Link
-            href={`/study/${nextTopic.domain_id}/${nextTopic.id}`}
-            className="mt-3 inline-block w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition-all hover:bg-indigo-500 active:scale-[0.98]"
-          >
-            Continue Studying →
-          </Link>
-        </div>
+        <Card className="mt-6 w-full max-w-sm border-study/25 bg-study-muted p-4 text-left">
+          <p className="text-label uppercase tracking-wide text-study">Next recommended topic</p>
+          <p className="mt-1 text-body font-semibold text-text-primary">{nextTopic.title}</p>
+          <Button href={`/study/${nextTopic.domain_id}/${nextTopic.id}`} tone="study" className="mt-3 w-full">
+            Continue Learning
+          </Button>
+        </Card>
       )}
 
-      <Link href="/study" className="mt-4 text-sm font-medium text-gray-500 hover:text-gray-900">
-        ← Back to Study Home
+      <Link href="/study" className="mt-6 flex items-center gap-1 text-body-sm font-medium text-text-muted hover:text-text-primary">
+        <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+        Back to Study Home
       </Link>
     </div>
   );

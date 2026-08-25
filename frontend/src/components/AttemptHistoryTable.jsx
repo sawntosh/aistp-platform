@@ -1,4 +1,7 @@
 import { useMemo, useState } from "react";
+import { ChevronUp } from "lucide-react";
+import EmptyState from "./ui/EmptyState";
+import { cn } from "../lib/cn";
 
 function formatDateTime(iso) {
   if (!iso) return "—";
@@ -17,22 +20,6 @@ const COLUMNS = [
   { key: "accuracy_percent", label: "Accuracy" },
   { key: "finished_at", label: "Status" },
 ];
-
-function SortIcon({ direction }) {
-  return (
-    <svg
-      viewBox="0 0 20 20"
-      fill="currentColor"
-      className={`h-3 w-3 transition-transform ${direction === "asc" ? "rotate-180" : ""}`}
-    >
-      <path
-        fillRule="evenodd"
-        d="M10 12.5a.75.75 0 0 1-.53-.22l-4-4a.75.75 0 1 1 1.06-1.06L10 10.69l3.47-3.47a.75.75 0 1 1 1.06 1.06l-4 4a.75.75 0 0 1-.53.22Z"
-        clipRule="evenodd"
-      />
-    </svg>
-  );
-}
 
 export default function AttemptHistoryTable({ sessions }) {
   const [sortKey, setSortKey] = useState("started_at");
@@ -66,59 +53,49 @@ export default function AttemptHistoryTable({ sessions }) {
 
   if (!sessions?.length) {
     return (
-      <div className="px-6 pb-6 text-sm text-gray-400">
-        No sessions yet — start practicing to see your history here.
+      <div className="px-6 pb-6">
+        <EmptyState title="No sessions yet" description="Start practicing to see your history here." />
       </div>
     );
   }
 
   return (
     <div className="overflow-x-auto">
-      <table className="min-w-full divide-y divide-gray-100 text-sm">
-        <thead className="bg-indigo-50/60">
+      <table className="min-w-full divide-y divide-border text-body-sm">
+        <thead className="bg-surface-muted">
           <tr>
             {COLUMNS.map((col) => (
-              <th
-                key={col.key}
-                scope="col"
-                className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500"
-              >
+              <th key={col.key} scope="col" className="px-6 py-3 text-left text-caption font-medium uppercase tracking-wide text-text-muted">
                 <button
                   type="button"
                   onClick={() => handleSort(col.key)}
-                  className="flex items-center gap-1 transition-colors hover:text-gray-900"
+                  className="flex cursor-pointer items-center gap-1 transition-colors hover:text-text-primary"
                 >
                   {col.label}
-                  {sortKey === col.key && <SortIcon direction={sortDir} />}
+                  {sortKey === col.key && (
+                    <ChevronUp className={cn("h-3 w-3 transition-transform", sortDir === "desc" && "rotate-180")} aria-hidden="true" />
+                  )}
                 </button>
               </th>
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-100">
+        <tbody className="divide-y divide-border">
           {sorted.map((session) => {
             const isComplete = Boolean(session.finished_at);
             return (
-              <tr key={session.id} className="transition-colors hover:bg-gray-50">
-                <td className="px-6 py-3 text-gray-700">{formatDateTime(session.started_at)}</td>
-                <td className="px-6 py-3 tabular-nums text-gray-700">{session.question_count}</td>
-                <td className="px-6 py-3 tabular-nums text-gray-700">
+              <tr key={session.id} className="transition-colors hover:bg-surface-muted">
+                <td className="px-6 py-3 text-text-secondary">{formatDateTime(session.started_at)}</td>
+                <td className="px-6 py-3 tabular-nums text-text-secondary">{session.question_count}</td>
+                <td className="px-6 py-3 tabular-nums text-text-secondary">
                   {isComplete ? `${session.score} / ${session.question_count}` : "—"}
                 </td>
-                <td className="px-6 py-3 tabular-nums text-gray-700">
+                <td className="px-6 py-3 tabular-nums text-text-secondary">
                   {isComplete ? `${session.accuracy_percent}%` : "—"}
                 </td>
                 <td className="px-6 py-3">
-                  <span
-                    className={`inline-flex items-center gap-1.5 text-sm font-medium ${
-                      isComplete ? "text-emerald-600" : "text-indigo-600"
-                    }`}
-                  >
-                    <span
-                      className={`h-1.5 w-1.5 rounded-full ${
-                        isComplete ? "bg-emerald-500" : "bg-indigo-500"
-                      }`}
-                    />
+                  <span className={cn("inline-flex items-center gap-1.5 font-medium", isComplete ? "text-success" : "text-primary")}>
+                    <span className={cn("h-1.5 w-1.5 rounded-full", isComplete ? "bg-success" : "bg-primary")} />
                     {isComplete ? "Completed" : "In progress"}
                   </span>
                 </td>

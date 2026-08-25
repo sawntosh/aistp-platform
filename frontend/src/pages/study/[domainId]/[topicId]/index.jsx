@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import Link from "next/link";
+import { BookOpen, ChevronLeft } from "lucide-react";
 import { useAuth } from "../../../../context/AuthContext";
 import {
   completeStudySession,
@@ -15,6 +16,10 @@ import StudyQuestion from "../../../../components/StudyQuestion";
 import StudyAnswerFeedback from "../../../../components/StudyAnswerFeedback";
 import StudyCompletion from "../../../../components/StudyCompletion";
 import ConfirmModal from "../../../../components/ConfirmModal";
+import Dialog from "../../../../components/ui/Dialog";
+import Skeleton from "../../../../components/ui/Skeleton";
+import ErrorState from "../../../../components/ui/ErrorState";
+import Button from "../../../../components/ui/Button";
 import { RichText } from "../../../../utils/richText";
 
 // Builds the study-answer payload shape for the current question's type
@@ -155,40 +160,37 @@ export default function StudyTopicPage() {
   }
 
   return (
-    <div className="min-h-[calc(100vh-49px)] bg-gray-50 px-4 py-8">
+    <div className="min-h-[calc(100vh-57px)] bg-background px-4 py-8 sm:px-6">
       <div className="mx-auto max-w-5xl">
-        <Link href={`/study/${domainId}`} className="text-sm font-medium text-gray-500 hover:text-gray-900">
-          ← {sidebarData?.domain?.name ?? "Study"}
-        </Link>
-        <span className="ml-3 text-xs font-semibold uppercase tracking-wide text-indigo-500">📖 Study Mode</span>
+        <div className="flex items-center gap-3">
+          <Link
+            href={`/study/${domainId}`}
+            className="flex items-center gap-1 text-body-sm font-medium text-text-muted transition-colors hover:text-text-primary"
+          >
+            <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+            {sidebarData?.domain?.name ?? "Study"}
+          </Link>
+          <span className="flex items-center gap-1 text-label uppercase tracking-wide text-study">
+            <BookOpen className="h-3.5 w-3.5" aria-hidden="true" />
+            Study Mode
+          </span>
+        </div>
 
         {pageState === "loading" && (
           <div className="mt-8 space-y-4" aria-busy="true" aria-label="Loading study content">
-            <div className="h-6 w-1/3 animate-pulse rounded bg-gray-200" />
-            <div className="h-4 w-2/3 animate-pulse rounded bg-gray-200" />
-            <div className="h-40 animate-pulse rounded-xl bg-gray-100" />
+            <Skeleton className="h-7 w-1/3" />
+            <Skeleton className="h-4 w-2/3" />
+            <Skeleton className="h-40 w-full" />
           </div>
         )}
 
         {pageState === "error" && (
-          <div className="mt-8 rounded-xl border border-red-200 bg-red-50 p-6 text-center">
-            <p className="text-sm text-red-700">Something went wrong loading this topic.</p>
-            <div className="mt-3 flex justify-center gap-3">
-              <button
-                type="button"
-                onClick={loadTopic}
-                className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-500 active:scale-[0.98]"
-              >
-                Try Again
-              </button>
-              <Link
-                href="/study"
-                className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-              >
-                Back to Study
-              </Link>
-            </div>
-          </div>
+          <ErrorState
+            className="mt-8"
+            title="Something went wrong"
+            description="We couldn't load this topic."
+            onRetry={loadTopic}
+          />
         )}
 
         {pageState === "ready" && start && (
@@ -235,7 +237,7 @@ export default function StudyTopicPage() {
                     result={result}
                   />
 
-                  {answerError && <p className="mt-3 text-sm text-red-600">{answerError}</p>}
+                  {answerError && <p className="mt-3 text-body-sm text-error">{answerError}</p>}
 
                   {result && (
                     <StudyAnswerFeedback
@@ -255,7 +257,6 @@ export default function StudyTopicPage() {
               <StudyCompletion
                 domainName={sidebarData.domain.name}
                 topicTitle={start.topic.title}
-                domainId={domainId}
                 questionsAnswered={completion?.questions_answered ?? 0}
                 nextTopic={completion?.next_topic ?? null}
               />
@@ -267,35 +268,18 @@ export default function StudyTopicPage() {
       {/* "Review this concept": reopens the lesson content without losing
           question progress -- an in-page panel rather than navigating
           away, so there's no state to lose or restore. */}
-      {reviewOpen && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center" role="dialog" aria-modal="true" aria-label="Review this concept">
-          <div className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-white p-6 shadow-lg sm:rounded-2xl">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-gray-900">{start?.topic?.title}</h2>
-              <button
-                type="button"
-                onClick={() => setReviewOpen(false)}
-                className="rounded-full p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
-                aria-label="Close"
-              >
-                ✕
-              </button>
-            </div>
-            {start?.content ? (
-              <RichText text={start.content.content} />
-            ) : (
-              <p className="text-sm text-gray-500">No reading content available.</p>
-            )}
-            <button
-              type="button"
-              onClick={() => setReviewOpen(false)}
-              className="mt-6 w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition-all hover:bg-indigo-500 active:scale-[0.98]"
-            >
-              Back to Question
-            </button>
+      <Dialog open={reviewOpen} onClose={() => setReviewOpen(false)} title={start?.topic?.title} className="max-w-lg">
+        {start?.content ? (
+          <div className="mt-3 max-h-[60vh] overflow-y-auto pr-1">
+            <RichText text={start.content.content} variant="reading" />
           </div>
-        </div>
-      )}
+        ) : (
+          <p className="text-body-sm text-text-muted">No reading content available.</p>
+        )}
+        <Button tone="study" onClick={() => setReviewOpen(false)} className="mt-6 w-full">
+          Back to Question
+        </Button>
+      </Dialog>
 
       <ConfirmModal
         open={Boolean(pendingTopicSwitch)}

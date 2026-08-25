@@ -1,48 +1,50 @@
 import Link from "next/link";
+import { ArrowRight, BookOpen, Target } from "lucide-react";
+import { cn } from "../lib/cn";
 
-// Two visual variants so Study and Test read as distinct experiences
-// even though they're built from the same card shape: "study" leans
-// calm/educational (soft indigo, book icon), "test" leans
-// assessment/measurable (solid slate, target icon).
 const VARIANTS = {
   study: {
-    wrapper: "border-indigo-100 bg-gradient-to-br from-indigo-50 to-white hover:border-indigo-300",
-    icon: "bg-indigo-100 text-indigo-700",
-    title: "text-indigo-950",
-    cta: "bg-indigo-600 hover:bg-indigo-500 text-white",
+    icon: BookOpen,
+    ring: "hover:border-study/40",
+    iconWrap: "bg-study-muted text-study",
+    cta: "text-study",
   },
   test: {
-    wrapper: "border-gray-200 bg-gradient-to-br from-gray-50 to-white hover:border-gray-400",
-    icon: "bg-gray-900 text-white",
-    title: "text-gray-950",
-    cta: "bg-gray-900 hover:bg-gray-800 text-white",
+    icon: Target,
+    ring: "hover:border-test/40",
+    iconWrap: "bg-test-muted text-test",
+    cta: "text-test",
   },
 };
 
-export default function StudyModeCard({ variant, icon, title, description, bullets = [], ctaLabel, href }) {
+// Two visual variants so Study and Test read as distinct experiences before
+// the copy is even read: emerald/book for learning, indigo/target for assessment.
+export default function StudyModeCard({ variant, title, description, bullets = [], ctaLabel, href }) {
   const styles = VARIANTS[variant] ?? VARIANTS.study;
+  const Icon = styles.icon;
 
   return (
     <Link
       href={href}
-      className={`group flex flex-col rounded-2xl border-2 p-6 shadow-sm transition-all hover:shadow-md active:scale-[0.99] ${styles.wrapper}`}
+      className={cn(
+        "group flex flex-col rounded-lg border border-border bg-surface p-6 transition-all duration-150 hover:shadow-md",
+        styles.ring
+      )}
     >
-      <span className={`flex h-12 w-12 items-center justify-center rounded-full text-2xl ${styles.icon}`} aria-hidden="true">
-        {icon}
+      <span className={cn("flex h-11 w-11 items-center justify-center rounded-md", styles.iconWrap)} aria-hidden="true">
+        <Icon className="h-5 w-5" />
       </span>
-      <h2 className={`mt-4 text-lg font-semibold ${styles.title}`}>{title}</h2>
-      <p className="mt-1.5 text-sm text-gray-600">{description}</p>
+      <h2 className="mt-4 text-h3 text-text-primary">{title}</h2>
+      <p className="mt-1.5 text-body-sm text-text-muted">{description}</p>
       {bullets.length > 0 && (
-        <ul className="mt-3 space-y-1 text-xs text-gray-500">
+        <ul className="mt-3 space-y-1 text-body-sm text-text-muted">
           {bullets.map((bullet) => (
             <li key={bullet}>{bullet}</li>
           ))}
         </ul>
       )}
-      <span
-        className={`mt-5 inline-flex w-fit items-center gap-1.5 rounded-md px-4 py-2 text-sm font-semibold transition-all group-active:scale-[0.98] ${styles.cta}`}
-      >
-        {ctaLabel} <span aria-hidden="true">→</span>
+      <span className={cn("mt-5 inline-flex w-fit items-center gap-1.5 text-body-sm font-semibold transition-transform group-hover:translate-x-0.5", styles.cta)}>
+        {ctaLabel} <ArrowRight className="h-4 w-4" aria-hidden="true" />
       </span>
     </Link>
   );

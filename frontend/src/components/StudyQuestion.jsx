@@ -1,3 +1,8 @@
+import { Check, X } from "lucide-react";
+import { cn } from "../lib/cn";
+import Button from "./ui/Button";
+import { Card } from "./ui/Card";
+
 const OPTION_TYPES = new Set(["mcq", "true_false", "multi_select"]);
 
 function isAnswerReady(question, answer) {
@@ -42,38 +47,31 @@ function OptionList({ question, answer, onAnswerChange, isAnswered, result }) {
             aria-checked={isSelected}
             disabled={isAnswered}
             onClick={() => toggle(option.id)}
-            className={[
-              "flex w-full items-center justify-between gap-3 rounded-lg border px-4 py-3 text-left text-sm transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500",
+            className={cn(
+              "flex w-full items-center justify-between gap-3 rounded-md border px-4 py-3 text-left text-body-sm transition-all duration-150",
+              "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-study",
               isCorrectOption
-                ? "border-green-500 bg-green-50 text-green-800 animate-pop"
+                ? "border-success bg-success-muted text-success animate-pop"
                 : isWrongSelection
-                  ? "border-red-500 bg-red-50 text-red-800 animate-shake"
+                  ? "border-error bg-error-muted text-error animate-shake"
                   : isSelected
-                    ? "border-indigo-500 bg-indigo-50 text-indigo-800"
-                    : "border-gray-200 hover:border-gray-300 hover:shadow-sm",
-              isAnswered ? "cursor-default" : "cursor-pointer active:scale-[0.99]",
-            ].join(" ")}
+                    ? "border-study bg-study-muted text-study"
+                    : "border-border hover:border-border-strong hover:bg-surface-muted",
+              isAnswered ? "cursor-default" : "cursor-pointer"
+            )}
           >
             <span className="flex items-center gap-2">
-              <span aria-hidden="true" className="font-medium text-gray-400">
+              <span aria-hidden="true" className="font-medium text-text-muted">
                 {letter}.
               </span>
               <span>{option.text}</span>
             </span>
-            {isCorrectOption && (
-              <span aria-hidden="true" className="text-green-600">
-                ✓
-              </span>
-            )}
-            {isWrongSelection && (
-              <span aria-hidden="true" className="text-red-600">
-                ✕
-              </span>
-            )}
+            {isCorrectOption && <Check className="h-4 w-4 shrink-0" aria-hidden="true" />}
+            {isWrongSelection && <X className="h-4 w-4 shrink-0" aria-hidden="true" />}
           </button>
         );
       })}
-      {isMulti && !isAnswered && <p className="text-xs text-gray-400">Select all options that apply.</p>}
+      {isMulti && !isAnswered && <p className="text-caption text-text-muted">Select all options that apply.</p>}
     </fieldset>
   );
 }
@@ -91,14 +89,14 @@ function FillBlank({ answer, onAnswerChange, isAnswered, result }) {
         value={answer ?? ""}
         onChange={(e) => onAnswerChange(e.target.value)}
         placeholder="Type your answer"
-        className={[
-          "w-full rounded-lg border px-4 py-3 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500",
+        className={cn(
+          "w-full rounded-md border px-4 py-3 text-body-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-study",
           isAnswered
             ? result?.isCorrect
-              ? "border-green-500 bg-green-50 text-green-800"
-              : "border-red-500 bg-red-50 text-red-800"
-            : "border-gray-200",
-        ].join(" ")}
+              ? "border-success bg-success-muted text-success"
+              : "border-error bg-error-muted text-error"
+            : "border-border-strong bg-surface"
+        )}
       />
     </div>
   );
@@ -123,12 +121,12 @@ function Matching({ question, answer, onAnswerChange, isAnswered, result }) {
         return (
           <div
             key={pair.id}
-            className={[
-              "flex flex-col gap-2 rounded-lg border px-4 py-3 sm:flex-row sm:items-center sm:justify-between",
-              isRowCorrect ? "border-green-500 bg-green-50" : isRowWrong ? "border-red-500 bg-red-50" : "border-gray-200",
-            ].join(" ")}
+            className={cn(
+              "flex flex-col gap-2 rounded-md border px-4 py-3 sm:flex-row sm:items-center sm:justify-between",
+              isRowCorrect ? "border-success bg-success-muted" : isRowWrong ? "border-error bg-error-muted" : "border-border"
+            )}
           >
-            <span className="text-sm font-medium text-gray-900">{pair.prompt_text}</span>
+            <span className="text-body-sm font-medium text-text-primary">{pair.prompt_text}</span>
             <label className="sr-only" htmlFor={`study-match-${pair.id}`}>
               Match for {pair.prompt_text}
             </label>
@@ -137,7 +135,7 @@ function Matching({ question, answer, onAnswerChange, isAnswered, result }) {
               disabled={isAnswered}
               value={selected}
               onChange={(e) => setPair(pair.id, e.target.value)}
-              className="rounded-md border border-gray-200 px-3 py-2 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500 sm:w-64"
+              className="rounded-md border border-border-strong bg-surface px-3 py-2 text-body-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-study sm:w-64"
             >
               <option value="" disabled>
                 Choose a match…
@@ -170,11 +168,11 @@ export default function StudyQuestion({
   const canCheck = isAnswerReady(question, answer);
 
   return (
-    <div className="rounded-xl bg-white p-6 shadow">
-      <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-indigo-500">
-        Question {questionNumber} of {totalQuestions}
+    <Card className="p-6">
+      <p className="mb-1 text-label uppercase tracking-wide text-study">
+        Knowledge Check &middot; Question {questionNumber} of {totalQuestions}
       </p>
-      <h2 className="mb-6 text-lg font-medium text-gray-900">{question.text}</h2>
+      <h2 className="mb-6 text-h3 font-normal text-text-primary">{question.text}</h2>
 
       {OPTION_TYPES.has(question.question_type) && (
         <OptionList question={question} answer={answer} onAnswerChange={onAnswerChange} isAnswered={isAnswered} result={result} />
@@ -187,15 +185,10 @@ export default function StudyQuestion({
       )}
 
       {!isAnswered && (
-        <button
-          type="button"
-          onClick={onCheck}
-          disabled={!canCheck || isChecking}
-          className="mt-5 w-full rounded-md bg-indigo-600 px-3 py-2.5 text-sm font-medium text-white transition-all hover:bg-indigo-500 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:px-6"
-        >
+        <Button tone="study" onClick={onCheck} disabled={!canCheck} isLoading={isChecking} className="mt-5 w-full sm:w-auto">
           {isChecking ? "Checking…" : "Check Answer"}
-        </button>
+        </Button>
       )}
-    </div>
+    </Card>
   );
 }

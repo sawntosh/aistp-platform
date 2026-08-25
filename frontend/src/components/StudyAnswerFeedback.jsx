@@ -1,6 +1,9 @@
 import { useState } from "react";
+import { CheckCircle2, Lightbulb, XCircle } from "lucide-react";
 import { fetchExplanation } from "../services/explanationsService";
 import { RichText } from "../utils/richText";
+import { cn } from "../lib/cn";
+import Button from "./ui/Button";
 
 export default function StudyAnswerFeedback({ isCorrect, correctAnswerText, questionId, onReviewConcept, onNext, isLastQuestion }) {
   const [explanation, setExplanation] = useState(null);
@@ -25,16 +28,19 @@ export default function StudyAnswerFeedback({ isCorrect, correctAnswerText, ques
   return (
     <div
       role="status"
-      className={`mt-4 rounded-xl border p-6 animate-pop ${isCorrect ? "border-green-200 bg-green-50" : "border-amber-200 bg-amber-50"}`}
+      className={cn(
+        "mt-4 rounded-lg border p-6 animate-pop",
+        isCorrect ? "border-success/25 bg-success-muted" : "border-warning/25 bg-warning-muted"
+      )}
     >
-      <p className={`flex items-center gap-2 font-semibold ${isCorrect ? "text-green-800" : "text-amber-800"}`}>
-        <span aria-hidden="true">{isCorrect ? "✓" : "○"}</span>
+      <p className={cn("flex items-center gap-2 text-h3", isCorrect ? "text-success" : "text-warning")}>
+        {isCorrect ? <CheckCircle2 className="h-5 w-5" aria-hidden="true" /> : <XCircle className="h-5 w-5" aria-hidden="true" />}
         {isCorrect ? "Correct" : "Not quite"}
       </p>
 
       {!isCorrect && (
-        <p className="mt-2 text-sm text-gray-700">
-          The best answer is: <span className="font-medium text-gray-900">{correctAnswerText}</span>
+        <p className="mt-2 text-body-sm text-text-secondary">
+          The best answer is: <span className="font-medium text-text-primary">{correctAnswerText}</span>
         </p>
       )}
 
@@ -44,16 +50,17 @@ export default function StudyAnswerFeedback({ isCorrect, correctAnswerText, ques
             type="button"
             onClick={handleExplain}
             disabled={isLoadingExplanation}
-            className="text-sm font-medium text-indigo-600 hover:underline disabled:opacity-50"
+            className="flex cursor-pointer items-center gap-1.5 text-body-sm font-medium text-primary hover:underline disabled:opacity-50"
           >
-            {isLoadingExplanation ? "Asking AI tutor…" : "💡 Why this matters"}
+            <Lightbulb className="h-4 w-4" aria-hidden="true" />
+            {isLoadingExplanation ? "Asking AI tutor…" : "Why this matters"}
           </button>
         )}
-        {explanationError && <p className="mt-2 text-sm text-red-600">{explanationError}</p>}
+        {explanationError && <p className="mt-2 text-body-sm text-error">{explanationError}</p>}
         {explanation && (
-          <div className="mt-2 rounded-lg border border-gray-200 bg-white p-3">
+          <div className="mt-2 rounded-md border border-border bg-surface p-4">
             {isExplanationFallback && (
-              <p className="mb-1.5 text-xs font-medium text-amber-600">
+              <p className="mb-1.5 text-caption font-medium text-warning">
                 AI tutor is temporarily unavailable — showing a basic explanation.
               </p>
             )}
@@ -64,21 +71,13 @@ export default function StudyAnswerFeedback({ isCorrect, correctAnswerText, ques
 
       <div className="mt-5 flex flex-col gap-2 sm:flex-row">
         {!isCorrect && (
-          <button
-            type="button"
-            onClick={onReviewConcept}
-            className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98]"
-          >
+          <Button variant="outline" onClick={onReviewConcept}>
             Review this concept
-          </button>
+          </Button>
         )}
-        <button
-          type="button"
-          onClick={onNext}
-          className="flex-1 rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white transition-all hover:bg-gray-800 active:scale-[0.98]"
-        >
-          {isLastQuestion ? "Finish →" : "Next Question →"}
-        </button>
+        <Button tone="study" onClick={onNext} className="flex-1">
+          {isLastQuestion ? "Finish" : "Next Question"}
+        </Button>
       </div>
     </div>
   );

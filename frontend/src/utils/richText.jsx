@@ -133,14 +133,19 @@ export function renderInline(text, keyPrefix) {
 // Renders a run of non-heading blocks (paragraphs/lists/tables) -- shared
 // by both a top-level section's own content and a per-option subsection's
 // content nested inside it.
-export function renderTextBlocks(blocks, keyPrefix) {
+export function renderTextBlocks(blocks, keyPrefix, variant = "compact") {
+  const isReading = variant === "reading";
+  const textClass = isReading
+    ? "font-serif text-body-lg leading-[1.75] text-text-primary"
+    : "text-body-sm leading-relaxed text-text-secondary";
+
   return blocks.map((block, i) => {
     const key = `${keyPrefix}-${i}`;
     if (block.type === "ul") {
       return (
-        <ul key={key} className="list-disc space-y-1 pl-5">
+        <ul key={key} className="list-disc space-y-1.5 pl-5">
           {block.items.map((item, j) => (
-            <li key={j} className="text-sm leading-relaxed text-gray-700">
+            <li key={j} className={textClass}>
               {renderInline(item, `${key}-${j}`)}
             </li>
           ))}
@@ -149,9 +154,9 @@ export function renderTextBlocks(blocks, keyPrefix) {
     }
     if (block.type === "ol") {
       return (
-        <ol key={key} className="list-decimal space-y-1 pl-5">
+        <ol key={key} className="list-decimal space-y-1.5 pl-5">
           {block.items.map((item, j) => (
-            <li key={j} className="text-sm leading-relaxed text-gray-700">
+            <li key={j} className={textClass}>
               {renderInline(item, `${key}-${j}`)}
             </li>
           ))}
@@ -160,16 +165,13 @@ export function renderTextBlocks(blocks, keyPrefix) {
     }
     if (block.type === "table") {
       return (
-        <div key={key} className="overflow-x-auto rounded-md border border-gray-200">
-          <table className="w-full border-collapse text-sm">
+        <div key={key} className="overflow-x-auto rounded-md border border-border">
+          <table className="w-full border-collapse text-body-sm">
             {block.header && (
               <thead>
-                <tr className="bg-gray-50">
+                <tr className="bg-surface-muted">
                   {block.header.map((cell, c) => (
-                    <th
-                      key={c}
-                      className="border-b border-gray-200 px-2.5 py-1.5 text-left font-semibold text-gray-900"
-                    >
+                    <th key={c} className="border-b border-border px-2.5 py-1.5 text-left font-semibold text-text-primary">
                       {renderInline(cell, `${key}-h-${c}`)}
                     </th>
                   ))}
@@ -180,7 +182,7 @@ export function renderTextBlocks(blocks, keyPrefix) {
               {block.rows.map((row, r) => (
                 <tr key={r}>
                   {row.map((cell, c) => (
-                    <td key={c} className="border-b border-gray-100 px-2.5 py-1.5 align-top text-gray-700">
+                    <td key={c} className="border-b border-border px-2.5 py-1.5 align-top text-text-secondary">
                       {renderInline(cell, `${key}-${r}-${c}`)}
                     </td>
                   ))}
@@ -192,7 +194,7 @@ export function renderTextBlocks(blocks, keyPrefix) {
       );
     }
     return (
-      <p key={key} className="text-sm leading-relaxed text-gray-700">
+      <p key={key} className={textClass}>
         {renderInline(block.text, key)}
       </p>
     );
@@ -256,20 +258,21 @@ function classifySection(heading) {
 // (FeedbackPanel) and admin-authored Study Mode lesson content
 // (StudyContentReader, StudyAnswerFeedback's "From what you just
 // learned" recap).
-export function RichText({ text }) {
+export function RichText({ text, variant = "compact" }) {
   const sections = groupTextSections(parseTextBlocks(text));
+  const isReading = variant === "reading";
 
   return (
-    <div className="space-y-5">
+    <div className={isReading ? "space-y-7" : "space-y-5"}>
       {sections.map((section, i) => {
         const kind = classifySection(section.heading);
         const key = `sec-${i}`;
 
         if (kind === "correct") {
           return (
-            <div key={key} className="rounded-lg border border-green-200 bg-green-50 px-4 py-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-green-700">{section.heading}</p>
-              <div className="mt-1 text-[15px] font-medium text-green-900">
+            <div key={key} className="rounded-md border border-success/25 bg-success-muted px-4 py-3">
+              <p className="text-caption font-semibold uppercase tracking-wide text-success">{section.heading}</p>
+              <div className="mt-1 text-[15px] font-medium text-success">
                 {renderTextBlocks(section.blocks, key)}
               </div>
             </div>
@@ -278,15 +281,15 @@ export function RichText({ text }) {
 
         if (kind === "keyPoints") {
           return (
-            <div key={key} className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">{section.heading}</p>
+            <div key={key} className="rounded-md border border-success/25 bg-success-muted px-4 py-3">
+              <p className="text-caption font-semibold uppercase tracking-wide text-success">{section.heading}</p>
               <ul className="mt-2 space-y-1.5">
                 {section.blocks
                   .filter((block) => block.type === "ul" || block.type === "ol")
                   .flatMap((block) => block.items)
                   .map((item, j) => (
-                    <li key={j} className="flex items-start gap-2 text-sm leading-relaxed text-emerald-900">
-                      <span aria-hidden="true" className="mt-0.5 text-emerald-600">
+                    <li key={j} className="flex items-start gap-2 text-body-sm leading-relaxed text-success">
+                      <span aria-hidden="true" className="mt-0.5">
                         ✓
                       </span>
                       <span>{renderInline(item, `${key}-kp-${j}`)}</span>
@@ -300,28 +303,28 @@ export function RichText({ text }) {
         if (kind === "examTip" || kind === "keyConcept") {
           const isExamTip = kind === "examTip";
           return (
-            <div key={key} className={`border-l-2 pl-3 ${isExamTip ? "border-indigo-300" : "border-amber-300"}`}>
-              <p
-                className={`text-xs font-semibold uppercase tracking-wide ${
-                  isExamTip ? "text-indigo-700" : "text-amber-700"
-                }`}
-              >
+            <div key={key} className={`border-l-2 pl-3 ${isExamTip ? "border-primary/40" : "border-warning/40"}`}>
+              <p className={`text-caption font-semibold uppercase tracking-wide ${isExamTip ? "text-primary" : "text-warning"}`}>
                 {section.heading}
               </p>
-              <div className="mt-1 space-y-2">{renderTextBlocks(section.blocks, key)}</div>
+              <div className="mt-1 space-y-2">{renderTextBlocks(section.blocks, key, variant)}</div>
             </div>
           );
         }
 
         return (
           <div key={key}>
-            {section.heading && <h3 className="mb-1.5 text-sm font-semibold text-gray-900">{section.heading}</h3>}
-            <div className="space-y-2">{renderTextBlocks(section.blocks, key)}</div>
+            {section.heading && (
+              <h3 className={isReading ? "mb-2 text-h3 font-sans font-semibold text-text-primary" : "mb-1.5 text-body-sm font-semibold text-text-primary"}>
+                {section.heading}
+              </h3>
+            )}
+            <div className={isReading ? "space-y-4" : "space-y-2"}>{renderTextBlocks(section.blocks, key, variant)}</div>
             {section.subsections.length > 0 && (
               <div className="mt-3 space-y-2">
                 {section.subsections.map((sub, j) => (
-                  <div key={`${key}-sub-${j}`} className="rounded-md border border-red-100 bg-red-50/70 px-3 py-2">
-                    <p className="text-sm font-semibold text-red-800">{renderInline(sub.heading, `${key}-sub-${j}-h`)}</p>
+                  <div key={`${key}-sub-${j}`} className="rounded-md border border-error/20 bg-error-muted/60 px-3 py-2">
+                    <p className="text-body-sm font-semibold text-error">{renderInline(sub.heading, `${key}-sub-${j}-h`)}</p>
                     <div className="mt-1 space-y-1.5">{renderTextBlocks(sub.blocks, `${key}-sub-${j}`)}</div>
                   </div>
                 ))}
