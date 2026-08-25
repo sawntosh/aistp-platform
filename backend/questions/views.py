@@ -17,6 +17,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from accounts.permissions import IsAdminRole
+from services.answer_reveal_service import build_reveal_payload
 from services.analytics_service import record_attempt
 from services.question_generation_service import run_generation
 from services.scoring_service import score_answer
@@ -93,6 +94,10 @@ class QuestionListView(APIView):
             return Response({"detail": "count must be an integer."}, status=status.HTTP_400_BAD_REQUEST)
         count = max(1, min(count, MAX_SESSION_SIZE))
 
+        mode = request.query_params.get("mode", PracticeSession.Mode.PRACTICE)
+        if mode not in PracticeSession.Mode.values:
+            return Response({"detail": "mode must be 'practice' or 'test'."}, status=status.HTTP_400_BAD_REQUEST)
+
         questions_qs = Question.objects.filter(is_active=True)
 
         domains_param = request.query_params.get("domains")
@@ -117,9 +122,9 @@ class QuestionListView(APIView):
         )
         random.shuffle(questions)
 
-        session = PracticeSession.objects.create(user=request.user, question_count=len(questions))
+        session = PracticeSession.objects.create(user=request.user, question_count=len(questions), mode=mode)
         data = QuestionPublicSerializer(questions, many=True).data
-        return Response({"session_id": session.id, "questions": data})
+        return Response({"session_id": session.id, "mode": session.mode, "questions": data})
 
 
 class AnswerSubmitView(APIView):
@@ -197,22 +202,13 @@ class AnswerSubmitView(APIView):
 
         record_attempt(request.user, question.domain, is_correct)
 
-        response_payload = {"is_correct": is_correct, "question_type": qtype}
-        if qtype in (Question.QuestionType.MCQ, Question.QuestionType.TRUE_FALSE):
-            correct_option = question.options.filter(is_correct=True).first()
-            response_payload["correct_option_id"] = correct_option.id if correct_option else None
-            response_payload["correct_option_text"] = correct_option.text if correct_option else None
-        elif qtype == Question.QuestionType.MULTI_SELECT:
-            correct_options = question.options.filter(is_correct=True)
-            response_payload["correct_option_ids"] = [opt.id for opt in correct_options]
-            response_payload["correct_option_texts"] = [opt.text for opt in correct_options]
-        elif qtype == Question.QuestionType.FILL_BLANK:
-            first_answer = question.blank_answers.first()
-            response_payload["correct_answer"] = first_answer.answer_text if first_answer else None
-        elif qtype == Question.QuestionType.MATCHING:
-            response_payload["correct_pairing"] = {
-                str(pair.id): pair.match_text for pair in question.matching_pairs.all()
-            }
+        if session.mode == PracticeSession.Mode.TEST:
+            # Exam simulation: don't leak correctness or the answer key via
+            # the network response -- SessionReviewView reveals everything
+            # once the whole session is finished.
+            response_payload = {"question_type": qtype, "recorded": True}
+        else:
+            response_payload = {"is_correct": is_correct, "question_type": qtype, **build_reveal_payload(question)}
 
         return Response(response_payload)
 
@@ -238,6 +234,79 @@ class SessionFinishView(APIView):
                 "finished_at": session.finished_at,
                 "question_count": session.question_count,
                 "score": session.score,
+            }
+        )
+
+
+class SessionReviewView(APIView):
+    """Test Mode's end-of-session reveal: every answer the learner
+    submitted during a finished session, alongside the correct answer,
+    domain description, and resource links -- withheld during the
+    session itself (see AnswerSubmitView) so Test Mode plays out like a
+    real exam. Only available once the session has been finished, and
+    only to the learner who owns it."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, session_id):
+        session = get_object_or_404(
+            PracticeSession, id=session_id, user=request.user, finished_at__isnull=False
+        )
+        attempts = (
+            session.attempts.select_related("question__domain", "selected_option")
+            .prefetch_related(
+                "question__options",
+                "question__blank_answers",
+                "question__matching_pairs",
+                "selected_options",
+            )
+            .order_by("answered_at")
+        )
+
+        results = []
+        for attempt in attempts:
+            question = attempt.question
+            qtype = question.question_type
+
+            your_answer = {}
+            if qtype in (Question.QuestionType.MCQ, Question.QuestionType.TRUE_FALSE):
+                your_answer["selected_option_id"] = attempt.selected_option_id
+                your_answer["selected_option_text"] = (
+                    attempt.selected_option.text if attempt.selected_option else None
+                )
+            elif qtype == Question.QuestionType.MULTI_SELECT:
+                selected = list(attempt.selected_options.all())
+                your_answer["selected_option_ids"] = [opt.id for opt in selected]
+                your_answer["selected_option_texts"] = [opt.text for opt in selected]
+            elif qtype == Question.QuestionType.FILL_BLANK:
+                your_answer["text_answer"] = attempt.text_answer
+            elif qtype == Question.QuestionType.MATCHING:
+                your_answer["matching_response"] = attempt.matching_response
+
+            results.append(
+                {
+                    "question_id": question.id,
+                    "domain": DomainSerializer(question.domain).data,
+                    "text": question.text,
+                    "question_type": qtype,
+                    "difficulty": question.difficulty,
+                    "options": [{"id": opt.id, "text": opt.text} for opt in question.options.all()],
+                    "matching_pairs": [
+                        {"id": pair.id, "prompt_text": pair.prompt_text}
+                        for pair in question.matching_pairs.all()
+                    ],
+                    "is_correct": attempt.is_correct,
+                    "your_answer": your_answer,
+                    **build_reveal_payload(question),
+                }
+            )
+
+        return Response(
+            {
+                "session_id": session.id,
+                "question_count": session.question_count,
+                "score": session.score,
+                "mode": session.mode,
+                "results": results,
             }
         )
 

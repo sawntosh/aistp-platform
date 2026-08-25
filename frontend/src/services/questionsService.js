@@ -1,7 +1,7 @@
 import { apiFetch } from "./apiClient";
 
-export async function fetchPracticeQuestions(count = 10, domains = []) {
-  const params = new URLSearchParams({ count: String(count) });
+export async function fetchPracticeQuestions(count = 10, domains = [], mode = "practice") {
+  const params = new URLSearchParams({ count: String(count), mode });
   if (domains.length) params.set("domains", domains.join(","));
   return apiFetch(`/questions/?${params.toString()}`);
 }
@@ -24,6 +24,12 @@ export async function submitAnswer({ sessionId, questionId, answer }) {
 
 export async function finishSession(sessionId) {
   return apiFetch(`/questions/sessions/${sessionId}/finish/`, { method: "POST" });
+}
+
+// Test Mode only: the full per-question reveal (correct answers +
+// what the learner submitted) for a session that has already finished.
+export async function fetchSessionReview(sessionId) {
+  return apiFetch(`/questions/sessions/${sessionId}/review/`);
 }
 
 // -- Admin: domains --------------------------------------------------------

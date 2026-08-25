@@ -2,10 +2,17 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import { useAuth } from "../context/AuthContext";
 import { usePracticeSession } from "../context/PracticeSessionContext";
-import { fetchDomains, fetchPracticeQuestions, finishSession, submitAnswer } from "../services/questionsService";
+import {
+  fetchDomains,
+  fetchPracticeQuestions,
+  fetchSessionReview,
+  finishSession,
+  submitAnswer,
+} from "../services/questionsService";
 import QuestionCard from "../components/QuestionCard";
 import FeedbackPanel from "../components/FeedbackPanel";
 import ConfirmModal from "../components/ConfirmModal";
+import { getDomainColor } from "../utils/domainColors";
 
 const DOMAIN_ICONS = ["🧩", "🔄", "🔍", "🧠", "🗂️", "🛠️"];
 
@@ -13,6 +20,21 @@ const SESSION_LENGTHS = [
   { value: 10, label: "Quick", minutes: "~10 min" },
   { value: 20, label: "Standard", minutes: "~20 min" },
   { value: 40, label: "Deep dive", minutes: "~40 min" },
+];
+
+const MODES = [
+  {
+    value: "practice",
+    label: "Practice Mode",
+    icon: "🎯",
+    description: "Instant feedback, AI explanations, and domain resources after every question.",
+  },
+  {
+    value: "test",
+    label: "Test Mode",
+    icon: "📝",
+    description: "Simulate the real exam — answers, explanations, and links are revealed only once you finish.",
+  },
 ];
 
 export default function PracticePage() {
@@ -24,6 +46,7 @@ export default function PracticePage() {
   const [sessionStarted, setSessionStarted] = useState(false);
   const [selectedDomainIds, setSelectedDomainIds] = useState([]);
   const [sessionLength, setSessionLength] = useState(10);
+  const [mode, setMode] = useState("practice");
 
   // `queue` holds the questions still owed an answer, in the order they'll be
   // shown. Skipping a question moves it from the front to the back instead
@@ -34,7 +57,14 @@ export default function PracticePage() {
   const [sessionId, setSessionId] = useState(null);
   const [answer, setAnswer] = useState(null);
   const [result, setResult] = useState(null);
+  // Test Mode: the backend withholds correctness on submit (see
+  // AnswerSubmitView), so this just tracks "moved past this question" --
+  // `result` stays null the whole session and correctness is only known
+  // once `testReview` loads at the end.
+  const [hasSubmitted, setHasSubmitted] = useState(false);
   const [correctCount, setCorrectCount] = useState(0);
+  const [finalScore, setFinalScore] = useState(null);
+  const [testReview, setTestReview] = useState(null);
   const [isLoadingQuestions, setIsLoadingQuestions] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loadError, setLoadError] = useState("");
@@ -73,14 +103,17 @@ export default function PracticePage() {
     setLoadError("");
     setIsLoadingQuestions(true);
     try {
-      const data = await fetchPracticeQuestions(sessionLength, selectedDomainIds);
+      const data = await fetchPracticeQuestions(sessionLength, selectedDomainIds, mode);
       setQueue(data.questions);
       setTotalCount(data.questions.length);
       setSkippedIds(new Set());
       setSessionId(data.session_id);
       setAnswer(null);
       setResult(null);
+      setHasSubmitted(false);
       setCorrectCount(0);
+      setFinalScore(null);
+      setTestReview(null);
       setIsSessionComplete(false);
       setSessionStarted(true);
     } catch {
@@ -102,13 +135,13 @@ export default function PracticePage() {
   const currentPosition = totalCount - queue.length + 1;
 
   function handleAnswerChange(nextAnswer) {
-    if (result) return;
+    if (result || hasSubmitted) return;
     setAnswer(nextAnswer);
     setLoadError("");
   }
 
   function handleSkip() {
-    if (result || queue.length <= 1) return;
+    if (result || hasSubmitted || queue.length <= 1) return;
     setQueue((q) => [...q.slice(1), q[0]]);
     setSkippedIds((s) => new Set(s).add(currentQuestion.id));
     setAnswer(null);
@@ -147,8 +180,26 @@ export default function PracticePage() {
     }
   }
 
+  // Test Mode review only: human-readable summary of what the learner
+  // actually submitted, from SessionReviewView's `your_answer` shape.
+  function describeYourAnswer(item) {
+    const submitted = item.your_answer ?? {};
+    switch (item.question_type) {
+      case "multi_select":
+        return (submitted.selected_option_texts ?? []).join(", ") || "No answer";
+      case "fill_blank":
+        return submitted.text_answer?.trim() ? submitted.text_answer : "No answer";
+      case "matching":
+        return item.matching_pairs
+          .map((pair) => `${pair.prompt_text} → ${submitted.matching_response?.[pair.id] ?? "—"}`)
+          .join("; ");
+      default: // mcq / true_false
+        return submitted.selected_option_text ?? "No answer";
+    }
+  }
+
   async function handleSubmit() {
-    if (result || isSubmitting) return;
+    if (result || hasSubmitted || isSubmitting) return;
     setIsSubmitting(true);
     try {
       const data = await submitAnswer({
@@ -156,16 +207,23 @@ export default function PracticePage() {
         questionId: currentQuestion.id,
         answer: buildAnswerPayload(currentQuestion, answer),
       });
-      setResult({
-        isCorrect: data.is_correct,
-        correctOptionId: data.correct_option_id,
-        correctOptionIds: data.correct_option_ids,
-        correctOptionTexts: data.correct_option_texts,
-        correctAnswer: data.correct_answer,
-        correctPairing: data.correct_pairing,
-        correctAnswerText: describeCorrectAnswer(currentQuestion, data),
-      });
-      if (data.is_correct) setCorrectCount((c) => c + 1);
+      if (mode === "test") {
+        // AnswerSubmitView withholds correctness in Test Mode -- just mark
+        // this question as submitted and move on; the real answer shows up
+        // in `testReview` once the session finishes.
+        setHasSubmitted(true);
+      } else {
+        setResult({
+          isCorrect: data.is_correct,
+          correctOptionId: data.correct_option_id,
+          correctOptionIds: data.correct_option_ids,
+          correctOptionTexts: data.correct_option_texts,
+          correctAnswer: data.correct_answer,
+          correctPairing: data.correct_pairing,
+          correctAnswerText: describeCorrectAnswer(currentQuestion, data),
+        });
+        if (data.is_correct) setCorrectCount((c) => c + 1);
+      }
     } catch {
       setLoadError("Couldn't submit your answer. Please try again.");
     } finally {
@@ -173,7 +231,24 @@ export default function PracticePage() {
     }
   }
 
-  function handleNext() {
+  // Best-effort: finishes the session and, for Test Mode, loads the
+  // deferred per-question reveal. A failure here shouldn't block the
+  // learner from seeing their local score -- it just means the session
+  // won't show as "Completed" on analytics, or the review won't load.
+  async function finalizeSession() {
+    try {
+      const finishData = await finishSession(sessionId);
+      setFinalScore(finishData.score);
+      if (mode === "test") {
+        const review = await fetchSessionReview(sessionId);
+        setTestReview(review);
+      }
+    } catch {
+      // Best-effort -- see comment above.
+    }
+  }
+
+  async function handleNext() {
     const remaining = queue.length - 1;
     setSkippedIds((s) => {
       if (!s.has(currentQuestion.id)) return s;
@@ -183,25 +258,19 @@ export default function PracticePage() {
     });
     setQueue((q) => q.slice(1));
     if (remaining <= 0) {
-      // Best-effort: the session summary below is computed from local state
-      // regardless, so a failed finish call shouldn't block the user here --
-      // it just means this session won't show as "Completed" on analytics.
-      finishSession(sessionId).catch(() => {});
+      await finalizeSession();
       setIsSessionComplete(true);
       return;
     }
     setAnswer(null);
     setResult(null);
+    setHasSubmitted(false);
     setLoadError("");
   }
 
   async function handleEndPractice() {
     setShowEndConfirm(false);
-    try {
-      await finishSession(sessionId);
-    } catch {
-      // Best-effort -- the session still ends locally even if this fails.
-    }
+    await finalizeSession();
     setIsSessionComplete(true);
   }
 
@@ -229,7 +298,10 @@ export default function PracticePage() {
               <h2 className="text-sm font-semibold text-indigo-900">What&apos;s in a practice session?</h2>
               <ul className="mt-3 space-y-2 text-sm text-indigo-800 list-disc list-inside">
                 <li>Real exam-style multiple choice questions across all 6 CTFL v4.0 knowledge domains.</li>
-                <li>Instant feedback on every answer — see the correct option highlighted right away.</li>
+                <li>
+                  Practice Mode gives instant feedback, AI explanations, and domain resource links after every
+                  question — Test Mode holds all of that back until you finish, just like the real exam.
+                </li>
                 <li>
                   AI-generated explanations for why an answer is right or wrong, tied back to the specific
                   concept being tested.
@@ -243,6 +315,38 @@ export default function PracticePage() {
           )}
 
           {loadError && <p className="text-sm text-red-600 animate-fade-in">{loadError}</p>}
+
+          <div>
+            <h2 className="mb-3 text-sm font-medium text-gray-700">Mode</h2>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {MODES.map((option) => {
+                const isSelected = mode === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setMode(option.value)}
+                    aria-pressed={isSelected}
+                    className={`rounded-xl border-2 p-4 text-left transition-all active:scale-[0.98] ${
+                      isSelected
+                        ? "border-indigo-600 bg-indigo-50 shadow-sm"
+                        : "border-gray-200 bg-white hover:border-indigo-200 hover:bg-indigo-50/40"
+                    }`}
+                  >
+                    <span className="flex items-center gap-2">
+                      <span className="text-lg">{option.icon}</span>
+                      <span
+                        className={`text-sm font-semibold ${isSelected ? "text-indigo-900" : "text-gray-900"}`}
+                      >
+                        {option.label}
+                      </span>
+                    </span>
+                    <span className="mt-1 block text-xs text-gray-500">{option.description}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
           <div>
             <h2 className="mb-1 text-sm font-medium text-gray-700">Filter by domain</h2>
@@ -329,7 +433,10 @@ export default function PracticePage() {
                 📝
               </span>
               <span>
-                <span className="font-semibold text-gray-900">{sessionLength} questions</span> from{" "}
+                <span className="font-semibold text-gray-900">
+                  {mode === "practice" ? "Practice Mode" : "Test Mode"}
+                </span>{" "}
+                · <span className="font-semibold text-gray-900">{sessionLength} questions</span> from{" "}
                 <span className="font-semibold text-gray-900">
                   {selectedDomainIds.length === 0
                     ? "all domains"
@@ -353,32 +460,74 @@ export default function PracticePage() {
   }
 
   if (isSessionComplete) {
-    const scorePercent = Math.round((correctCount / totalCount) * 100);
+    const scoreValue = finalScore ?? correctCount;
+    const scorePercent = totalCount ? Math.round((scoreValue / totalCount) * 100) : 0;
+    const scoreColor =
+      scorePercent >= 70 ? "text-green-600" : scorePercent >= 40 ? "text-yellow-600" : "text-red-600";
+
     return (
-      <div className="min-h-[calc(100vh-49px)] flex items-center justify-center bg-gray-50 px-4">
-        <div className="w-full max-w-sm bg-white rounded-xl shadow p-8 text-center animate-pop">
-          <h1 className="text-2xl font-semibold text-gray-900 mb-2">Session complete</h1>
-          <p
-            className={`text-3xl font-semibold mb-1 ${
-              scorePercent >= 70 ? "text-green-600" : scorePercent >= 40 ? "text-yellow-600" : "text-red-600"
-            }`}
-          >
-            {correctCount} / {totalCount}
-          </p>
-          <p className="text-gray-500 mb-6">{scorePercent}% correct</p>
-          <button
-            type="button"
-            onClick={backToSetup}
-            className="w-full rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white transition-all hover:bg-indigo-500 active:scale-[0.98]"
-          >
-            Start another session
-          </button>
+      <div className="min-h-[calc(100vh-49px)] bg-gray-50 px-4 py-10">
+        <div className="mx-auto max-w-2xl space-y-6">
+          <div className="bg-white rounded-xl shadow p-8 text-center animate-pop">
+            <h1 className="text-2xl font-semibold text-gray-900 mb-2">
+              {mode === "test" ? "Test complete" : "Session complete"}
+            </h1>
+            <p className={`text-3xl font-semibold mb-1 ${scoreColor}`}>
+              {scoreValue} / {totalCount}
+            </p>
+            <p className="text-gray-500 mb-6">{scorePercent}% correct</p>
+            <button
+              type="button"
+              onClick={backToSetup}
+              className="w-full rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white transition-all hover:bg-indigo-500 active:scale-[0.98]"
+            >
+              Start another session
+            </button>
+          </div>
+
+          {mode === "test" && testReview && (
+            <div className="space-y-4">
+              <h2 className="text-lg font-semibold text-gray-900">Review your answers</h2>
+              {testReview.results.map((item, index) => {
+                const domainColor = getDomainColor(item.domain?.name);
+                return (
+                  <div key={item.question_id} className="bg-white rounded-xl shadow p-5">
+                    <div className="mb-2 flex items-center justify-between">
+                      <span
+                        className={`inline-block rounded-full px-3 py-1 text-xs font-medium ${domainColor.bg} ${domainColor.text}`}
+                      >
+                        {item.domain?.name}
+                      </span>
+                      <span className="text-xs font-medium uppercase tracking-wide text-gray-400">
+                        Question {index + 1}
+                      </span>
+                    </div>
+                    <p className="text-sm font-medium text-gray-900 mb-2">{item.text}</p>
+                    <p className="text-sm text-gray-600 mb-3">
+                      Your answer: <span className="font-medium text-gray-900">{describeYourAnswer(item)}</span>
+                    </p>
+                    <FeedbackPanel
+                      isCorrect={item.is_correct}
+                      correctOptionText={describeCorrectAnswer(
+                        { question_type: item.question_type, matching_pairs: item.matching_pairs },
+                        item
+                      )}
+                      questionId={item.question_id}
+                      domain={item.domain}
+                      hideNext
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
     );
   }
 
-  const progressPercent = totalCount ? ((currentPosition - 1 + (result ? 1 : 0)) / totalCount) * 100 : 0;
+  const isCurrentAnswered = mode === "test" ? hasSubmitted : Boolean(result);
+  const progressPercent = totalCount ? ((currentPosition - 1 + (isCurrentAnswered ? 1 : 0)) / totalCount) * 100 : 0;
 
   return (
     <div className="min-h-[calc(100vh-49px)] bg-gray-50 px-4 py-10">
@@ -388,9 +537,11 @@ export default function PracticePage() {
             Question {currentPosition} of {totalCount}
           </span>
           <div className="flex items-center gap-2">
-            <span className="rounded-full bg-indigo-50 px-2.5 py-0.5 font-medium text-indigo-700">
-              Score: {correctCount}
-            </span>
+            {mode === "practice" && (
+              <span className="rounded-full bg-indigo-50 px-2.5 py-0.5 font-medium text-indigo-700">
+                Score: {correctCount}
+              </span>
+            )}
             <button
               type="button"
               onClick={() => setShowEndConfirm(true)}
@@ -423,16 +574,20 @@ export default function PracticePage() {
             onSubmit={handleSubmit}
             onSkip={handleSkip}
             canSkip={queue.length > 1}
-            isAnswered={Boolean(result)}
+            isAnswered={isCurrentAnswered}
             isSubmitting={isSubmitting}
             result={result}
+            mode={mode}
+            onNext={handleNext}
+            isLastQuestion={isLastQuestion}
           />
 
-          {result && (
+          {mode === "practice" && result && (
             <FeedbackPanel
               isCorrect={result.isCorrect}
               correctOptionText={result.correctAnswerText}
               questionId={currentQuestion.id}
+              domain={currentQuestion.domain}
               onNext={handleNext}
               isLastQuestion={isLastQuestion}
             />

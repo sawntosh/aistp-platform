@@ -7,6 +7,7 @@ import { useCountUp } from "../hooks/useCountUp";
 import AccuracyRing from "../components/AccuracyRing";
 import DomainAccuracyBars from "../components/DomainAccuracyBars";
 import AttemptHistoryTable from "../components/AttemptHistoryTable";
+import StudyModeCard from "../components/StudyModeCard";
 
 const RANGE_OPTIONS = [
   { label: "Last 5", value: 5 },
@@ -137,12 +138,36 @@ export default function DashboardPage() {
       </Link>
 
       <div className="mx-auto max-w-5xl">
+        <div className="mb-8">
+          <h1 className="text-xl font-semibold text-gray-900">How do you want to learn today?</h1>
+          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <StudyModeCard
+              variant="study"
+              icon="📖"
+              title="Study Mode"
+              description="Learn concepts and reinforce them with related questions."
+              bullets={["No scores. No pressure."]}
+              ctaLabel="Start Studying"
+              href="/study"
+            />
+            <StudyModeCard
+              variant="test"
+              icon="🎯"
+              title="Test Mode"
+              description="Test your knowledge with realistic practice questions."
+              bullets={["Scoring & analytics included."]}
+              ctaLabel="Start Test"
+              href="/practice"
+            />
+          </div>
+        </div>
+
         <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">
               CTFL Practice &middot; Performance
             </p>
-            <h1 className="mt-1 font-serif text-3xl text-gray-900">Your Performance Report</h1>
+            <h2 className="mt-1 font-serif text-3xl text-gray-900">Your Performance Report</h2>
             <p className="mt-1 text-sm text-gray-500">
               Updated moments ago &middot; based on {completedSessions.length} completed session
               {completedSessions.length === 1 ? "" : "s"}

@@ -5,7 +5,8 @@ import { usePracticeSession } from "../context/PracticeSessionContext";
 import UserMenu from "./UserMenu";
 
 const LINKS = [
-  { href: "/practice", label: "Practice" },
+  { href: "/study", label: "Study" },
+  { href: "/practice", label: "Test" },
   { href: "/dashboard", label: "Analytics" },
 ];
 
@@ -38,7 +39,7 @@ export default function NavBar() {
           </span>
         ) : (
           <Link
-            href={user ? "/practice" : "/"}
+            href={user ? "/dashboard" : "/"}
             className="bg-gradient-to-r from-indigo-600 via-violet-600 to-fuchsia-600 bg-clip-text text-sm font-bold text-transparent"
           >
             AISTP
@@ -48,7 +49,7 @@ export default function NavBar() {
         {user ? (
           <div className="flex items-center gap-1">
             {links.map((link) => {
-              const isActive = router.pathname === link.href;
+              const isActive = router.pathname === link.href || router.pathname.startsWith(`${link.href}/`);
               if (isSessionActive) {
                 return (
                   <span
@@ -103,6 +104,16 @@ export default function NavBar() {
         ) : (
           <div className="flex items-center gap-2">
             <Link
+              href="/study"
+              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                router.pathname.startsWith("/study")
+                  ? "bg-indigo-50 text-indigo-700"
+                  : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+              }`}
+            >
+              Study
+            </Link>
+            <Link
               href="/practice"
               className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
                 router.pathname === "/practice"
@@ -110,7 +121,7 @@ export default function NavBar() {
                   : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
               }`}
             >
-              Practice
+              Test
             </Link>
             <Link
               href="/about"

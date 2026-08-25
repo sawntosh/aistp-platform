@@ -1,11 +1,3 @@
-import { getDomainColor } from "../utils/domainColors";
-
-const DIFFICULTY_STYLE = {
-  easy: "bg-emerald-50 text-emerald-700",
-  medium: "bg-amber-50 text-amber-700",
-  hard: "bg-rose-50 text-rose-700",
-};
-
 const OPTION_TYPES = new Set(["mcq", "true_false", "multi_select"]);
 
 function isAnswerReady(question, answer) {
@@ -13,11 +5,7 @@ function isAnswerReady(question, answer) {
   if (qtype === "multi_select") return Array.isArray(answer) && answer.length > 0;
   if (qtype === "fill_blank") return typeof answer === "string" && answer.trim().length > 0;
   if (qtype === "matching") {
-    return (
-      answer &&
-      typeof answer === "object" &&
-      question.matching_pairs.every((pair) => Boolean(answer[pair.id]))
-    );
+    return answer && typeof answer === "object" && question.matching_pairs.every((pair) => Boolean(answer[pair.id]));
   }
   return answer !== null && answer !== undefined;
 }
@@ -29,9 +17,7 @@ function OptionList({ question, answer, onAnswerChange, isAnswered, result }) {
     if (isAnswered) return;
     if (isMulti) {
       const current = Array.isArray(answer) ? answer : [];
-      onAnswerChange(
-        current.includes(optionId) ? current.filter((id) => id !== optionId) : [...current, optionId]
-      );
+      onAnswerChange(current.includes(optionId) ? current.filter((id) => id !== optionId) : [...current, optionId]);
     } else {
       onAnswerChange(optionId);
     }
@@ -40,20 +26,24 @@ function OptionList({ question, answer, onAnswerChange, isAnswered, result }) {
   const correctIds = isMulti ? new Set(result?.correctOptionIds ?? []) : new Set([result?.correctOptionId]);
 
   return (
-    <div className="space-y-2">
-      {question.options.map((option) => {
+    <fieldset className="space-y-2">
+      <legend className="sr-only">Answer options</legend>
+      {question.options.map((option, index) => {
         const isSelected = isMulti ? (answer ?? []).includes(option.id) : option.id === answer;
         const isCorrectOption = isAnswered && correctIds.has(option.id);
         const isWrongSelection = isAnswered && isSelected && !correctIds.has(option.id);
+        const letter = String.fromCharCode(65 + index);
 
         return (
           <button
             key={option.id}
             type="button"
+            role={isMulti ? "checkbox" : "radio"}
+            aria-checked={isSelected}
             disabled={isAnswered}
             onClick={() => toggle(option.id)}
             className={[
-              "flex w-full items-center justify-between gap-3 rounded-lg border px-4 py-3 text-left text-sm transition-all",
+              "flex w-full items-center justify-between gap-3 rounded-lg border px-4 py-3 text-left text-sm transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500",
               isCorrectOption
                 ? "border-green-500 bg-green-50 text-green-800 animate-pop"
                 : isWrongSelection
@@ -65,58 +55,51 @@ function OptionList({ question, answer, onAnswerChange, isAnswered, result }) {
             ].join(" ")}
           >
             <span className="flex items-center gap-2">
-              {isMulti && (
-                <span
-                  className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
-                    isSelected ? "border-indigo-600 bg-indigo-600" : "border-gray-300"
-                  }`}
-                >
-                  {isSelected && <span className="h-1.5 w-1.5 rounded-sm bg-white" />}
-                </span>
-              )}
+              <span aria-hidden="true" className="font-medium text-gray-400">
+                {letter}.
+              </span>
               <span>{option.text}</span>
             </span>
             {isCorrectOption && (
-              <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5 shrink-0 text-blue-600">
-                <path
-                  fillRule="evenodd"
-                  d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z"
-                  clipRule="evenodd"
-                />
-              </svg>
+              <span aria-hidden="true" className="text-green-600">
+                ✓
+              </span>
+            )}
+            {isWrongSelection && (
+              <span aria-hidden="true" className="text-red-600">
+                ✕
+              </span>
             )}
           </button>
         );
       })}
       {isMulti && !isAnswered && <p className="text-xs text-gray-400">Select all options that apply.</p>}
-    </div>
+    </fieldset>
   );
 }
 
 function FillBlank({ answer, onAnswerChange, isAnswered, result }) {
-  const isWrong = isAnswered && !result?.isCorrect;
   return (
     <div>
+      <label htmlFor="study-fill-blank" className="sr-only">
+        Your answer
+      </label>
       <input
+        id="study-fill-blank"
         type="text"
         disabled={isAnswered}
         value={answer ?? ""}
         onChange={(e) => onAnswerChange(e.target.value)}
         placeholder="Type your answer"
         className={[
-          "w-full rounded-lg border px-4 py-3 text-sm",
+          "w-full rounded-lg border px-4 py-3 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500",
           isAnswered
             ? result?.isCorrect
               ? "border-green-500 bg-green-50 text-green-800"
               : "border-red-500 bg-red-50 text-red-800"
-            : "border-gray-200 focus:border-indigo-400 focus:outline-none",
+            : "border-gray-200",
         ].join(" ")}
       />
-      {isWrong && result?.correctAnswer && (
-        <p className="mt-2 text-sm text-gray-600">
-          Accepted answer: <span className="font-medium text-gray-900">{result.correctAnswer}</span>
-        </p>
-      )}
     </div>
   );
 }
@@ -146,11 +129,15 @@ function Matching({ question, answer, onAnswerChange, isAnswered, result }) {
             ].join(" ")}
           >
             <span className="text-sm font-medium text-gray-900">{pair.prompt_text}</span>
+            <label className="sr-only" htmlFor={`study-match-${pair.id}`}>
+              Match for {pair.prompt_text}
+            </label>
             <select
+              id={`study-match-${pair.id}`}
               disabled={isAnswered}
               value={selected}
               onChange={(e) => setPair(pair.id, e.target.value)}
-              className="rounded-md border border-gray-200 px-3 py-2 text-sm sm:w-64"
+              className="rounded-md border border-gray-200 px-3 py-2 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500 sm:w-64"
             >
               <option value="" disabled>
                 Choose a match…
@@ -161,7 +148,6 @@ function Matching({ question, answer, onAnswerChange, isAnswered, result }) {
                 </option>
               ))}
             </select>
-            {isRowWrong && correctText && <span className="text-xs text-gray-600 sm:hidden">Correct: {correctText}</span>}
           </div>
         );
       })}
@@ -169,43 +155,26 @@ function Matching({ question, answer, onAnswerChange, isAnswered, result }) {
   );
 }
 
-export default function QuestionCard({
+export default function StudyQuestion({
   question,
+  questionNumber,
+  totalQuestions,
   answer,
   onAnswerChange,
-  onSubmit,
-  onSkip,
-  canSkip,
+  onCheck,
+  isChecking,
   isAnswered,
-  isSubmitting,
   result,
-  mode,
-  onNext,
-  isLastQuestion,
 }) {
   if (!question) return null;
-
-  const domainColor = getDomainColor(question.domain?.name);
-  const canSubmit = isAnswerReady(question, answer);
+  const canCheck = isAnswerReady(question, answer);
 
   return (
-    <div className="bg-white rounded-xl shadow p-6">
-      <div className="flex items-center justify-between mb-4">
-        <span
-          className={`inline-block rounded-full px-3 py-1 text-xs font-medium ${domainColor.bg} ${domainColor.text}`}
-        >
-          {question.domain?.name}
-        </span>
-        <span
-          className={`rounded-full px-2.5 py-0.5 text-xs font-medium uppercase tracking-wide ${
-            DIFFICULTY_STYLE[question.difficulty] ?? "bg-gray-100 text-gray-500"
-          }`}
-        >
-          {question.difficulty}
-        </span>
-      </div>
-
-      <p className="text-lg font-medium text-gray-900 mb-6">{question.text}</p>
+    <div className="rounded-xl bg-white p-6 shadow">
+      <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-indigo-500">
+        Question {questionNumber} of {totalQuestions}
+      </p>
+      <h2 className="mb-6 text-lg font-medium text-gray-900">{question.text}</h2>
 
       {OPTION_TYPES.has(question.question_type) && (
         <OptionList question={question} answer={answer} onAnswerChange={onAnswerChange} isAnswered={isAnswered} result={result} />
@@ -218,42 +187,14 @@ export default function QuestionCard({
       )}
 
       {!isAnswered && (
-        <div className="mt-4 flex gap-3">
-          {canSkip && (
-            <button
-              type="button"
-              onClick={onSkip}
-              disabled={isSubmitting}
-              title="Come back to this question after the others"
-              className="rounded-md border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 transition-all hover:bg-gray-50 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Skip for now
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={onSubmit}
-            disabled={!canSubmit || isSubmitting}
-            className="flex-1 rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white transition-all hover:bg-indigo-500 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {isSubmitting ? "Submitting…" : "Submit answer"}
-          </button>
-        </div>
-      )}
-
-      {isAnswered && mode === "test" && (
-        <div className="mt-4">
-          <p className="mb-3 rounded-lg bg-gray-50 px-4 py-2 text-sm text-gray-600">
-            Answer recorded — you&apos;ll see the correct answer and explanation after you finish the test.
-          </p>
-          <button
-            type="button"
-            onClick={onNext}
-            className="w-full rounded-md bg-gray-900 px-3 py-2 text-sm font-medium text-white transition-all hover:bg-gray-800 active:scale-[0.98]"
-          >
-            {isLastQuestion ? "Finish test" : "Next question"}
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={onCheck}
+          disabled={!canCheck || isChecking}
+          className="mt-5 w-full rounded-md bg-indigo-600 px-3 py-2.5 text-sm font-medium text-white transition-all hover:bg-indigo-500 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:px-6"
+        >
+          {isChecking ? "Checking…" : "Check Answer"}
+        </button>
       )}
     </div>
   );

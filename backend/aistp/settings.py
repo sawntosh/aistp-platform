@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     'questions',
     'explanations',
     'analytics',
+    'study',
 ]
 
 MIDDLEWARE = [
