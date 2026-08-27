@@ -22,6 +22,11 @@ from services.analytics_service import record_attempt
 from services.question_generation_service import run_generation
 from services.scoring_service import score_answer
 
+from .constants import (
+    confidence_label,
+    is_high_confidence_mistake,
+    is_low_confidence_correct,
+)
 from .imports import import_questions, validate_rows
 from .models import AnswerOption, Attempt, Domain, GenerationJob, PracticeSession, Question
 from .pagination import QuestionPagination
@@ -153,6 +158,19 @@ class AnswerSubmitView(APIView):
         )
         qtype = question.question_type
 
+        # Test Mode requires a 1-5 confidence rating with every answer;
+        # Practice Mode does not collect it. The serializer has already
+        # range-checked any value that was sent (see AnswerSubmitSerializer).
+        confidence = data.get("confidence")
+        if session.mode == PracticeSession.Mode.TEST:
+            if confidence is None:
+                return Response(
+                    {"detail": "confidence (1-5) is required for Test Mode answers."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        else:
+            confidence = None
+
         submission = {}
         attempt_fields = {}
         selected_options = None
@@ -198,6 +216,7 @@ class AnswerSubmitView(APIView):
             user=request.user,
             question=question,
             is_correct=is_correct,
+            confidence=confidence,
             **attempt_fields,
         )
         if selected_options is not None:
@@ -303,6 +322,15 @@ class SessionReviewView(APIView):
                     ],
                     "is_correct": attempt.is_correct,
                     "your_answer": your_answer,
+                    # Confidence diagnostics -- see questions.constants.
+                    "confidence": attempt.confidence,
+                    "confidence_label": confidence_label(attempt.confidence),
+                    "high_confidence_mistake": is_high_confidence_mistake(
+                        attempt.confidence, attempt.is_correct
+                    ),
+                    "low_confidence_correct": is_low_confidence_correct(
+                        attempt.confidence, attempt.is_correct
+                    ),
                     **build_reveal_payload(question),
                 }
             )

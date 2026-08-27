@@ -8,6 +8,7 @@ from rest_framework import serializers
 
 from services.question_generation_service import DOMAIN_TITLES
 
+from .constants import CONFIDENCE_MAX, CONFIDENCE_MIN
 from .models import AnswerOption, Domain, DomainResource, FillBlankAnswer, GenerationJob, MatchingPair, Question
 
 
@@ -204,6 +205,13 @@ class AnswerSubmitSerializer(serializers.Serializer):
     selected_option_ids = serializers.ListField(child=serializers.IntegerField(), required=False)
     text_answer = serializers.CharField(required=False, allow_blank=True)
     matching_response = serializers.DictField(child=serializers.CharField(), required=False)
+    # Test Mode self-rated confidence (1-5). Optional at this layer;
+    # AnswerSubmitView enforces it as required for Test Mode sessions and
+    # ignores it for Practice Mode. Stored on Attempt.confidence, never
+    # used for scoring.
+    confidence = serializers.IntegerField(
+        required=False, allow_null=True, min_value=CONFIDENCE_MIN, max_value=CONFIDENCE_MAX
+    )
 
 
 class GenerationJobSerializer(serializers.ModelSerializer):

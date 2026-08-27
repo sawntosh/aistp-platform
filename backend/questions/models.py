@@ -4,7 +4,10 @@ Domain, Question, AnswerOption, Attempt, PracticeSession
 -- Report Section 4.7 (Database Design) / Figure 8 (ER Diagram)
 """
 from django.conf import settings
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+
+from .constants import CONFIDENCE_MAX, CONFIDENCE_MIN
 
 
 class Domain(models.Model):
@@ -163,6 +166,15 @@ class Attempt(models.Model):
     text_answer = models.CharField(max_length=255, blank=True, default="")
     matching_response = models.JSONField(blank=True, default=dict)
     is_correct = models.BooleanField()
+    # Test Mode only: the learner's 1-5 self-rated confidence in this
+    # answer. Null for pre-feature attempts and for Practice Mode, where
+    # confidence is not collected. Purely diagnostic -- never read by
+    # services.scoring_service or the session score (see .constants).
+    confidence = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(CONFIDENCE_MIN), MaxValueValidator(CONFIDENCE_MAX)],
+    )
     answered_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
