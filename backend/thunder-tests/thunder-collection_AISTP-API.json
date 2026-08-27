@@ -1,0 +1,423 @@
+{
+  "client": "Thunder Client",
+  "collectionName": "AISTP Platform API",
+  "dateExported": "2026-08-27T00:00:00.000Z",
+  "version": "1.2",
+  "folders": [
+    { "_id": "fld-auth", "name": "Auth", "containerId": "", "created": "2026-08-27T00:00:00.000Z", "sortNum": 10000 },
+    { "_id": "fld-questions", "name": "Questions (student)", "containerId": "", "created": "2026-08-27T00:00:00.000Z", "sortNum": 20000 },
+    { "_id": "fld-admin-q", "name": "Admin - Questions CRUD", "containerId": "", "created": "2026-08-27T00:00:00.000Z", "sortNum": 30000 },
+    { "_id": "fld-admin-gen", "name": "Admin - AI Generation", "containerId": "", "created": "2026-08-27T00:00:00.000Z", "sortNum": 40000 },
+    { "_id": "fld-explain", "name": "AI Explanation", "containerId": "", "created": "2026-08-27T00:00:00.000Z", "sortNum": 50000 },
+    { "_id": "fld-analytics", "name": "Analytics", "containerId": "", "created": "2026-08-27T00:00:00.000Z", "sortNum": 60000 }
+  ],
+  "settings": {
+    "headers": [],
+    "auth": { "type": "bearer", "bearer": "{{accessToken}}" }
+  },
+  "requests": [
+    {
+      "_id": "req-register",
+      "colId": "AISTP-API",
+      "containerId": "fld-auth",
+      "name": "Register",
+      "url": "{{baseUrl}}/api/auth/register/",
+      "method": "POST",
+      "sortNum": 10000,
+      "created": "2026-08-27T00:00:00.000Z",
+      "modified": "2026-08-27T00:00:00.000Z",
+      "headers": [{ "name": "Content-Type", "value": "application/json" }],
+      "params": [],
+      "auth": { "type": "none" },
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"username\": \"student1\",\n  \"email\": \"student1@gmail.com\",\n  \"password\": \"Passw0rd!123\",\n  \"confirm_password\": \"Passw0rd!123\"\n}",
+        "form": []
+      },
+      "tests": []
+    },
+    {
+      "_id": "req-login",
+      "colId": "AISTP-API",
+      "containerId": "fld-auth",
+      "name": "Login (saves tokens)",
+      "url": "{{baseUrl}}/api/auth/login/",
+      "method": "POST",
+      "sortNum": 20000,
+      "created": "2026-08-27T00:00:00.000Z",
+      "modified": "2026-08-27T00:00:00.000Z",
+      "headers": [{ "name": "Content-Type", "value": "application/json" }],
+      "params": [],
+      "auth": { "type": "none" },
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"username\": \"tc_student\",\n  \"password\": \"StudentPass!123\"\n}",
+        "form": []
+      },
+      "tests": [
+        { "type": "set-env-var", "custom": "json.access", "action": "setto", "value": "accessToken" },
+        { "type": "set-env-var", "custom": "json.refresh", "action": "setto", "value": "refreshToken" },
+        { "type": "res-code", "custom": "", "action": "equal", "value": "200" }
+      ]
+    },
+    {
+      "_id": "req-refresh",
+      "colId": "AISTP-API",
+      "containerId": "fld-auth",
+      "name": "Refresh access token",
+      "url": "{{baseUrl}}/api/auth/refresh/",
+      "method": "POST",
+      "sortNum": 30000,
+      "created": "2026-08-27T00:00:00.000Z",
+      "modified": "2026-08-27T00:00:00.000Z",
+      "headers": [{ "name": "Content-Type", "value": "application/json" }],
+      "params": [],
+      "auth": { "type": "none" },
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"refresh\": \"{{refreshToken}}\"\n}",
+        "form": []
+      },
+      "tests": [
+        { "type": "set-env-var", "custom": "json.access", "action": "setto", "value": "accessToken" }
+      ]
+    },
+    {
+      "_id": "req-me",
+      "colId": "AISTP-API",
+      "containerId": "fld-auth",
+      "name": "Me (current user)",
+      "url": "{{baseUrl}}/api/auth/me/",
+      "method": "GET",
+      "sortNum": 40000,
+      "created": "2026-08-27T00:00:00.000Z",
+      "modified": "2026-08-27T00:00:00.000Z",
+      "headers": [],
+      "params": [],
+      "tests": []
+    },
+    {
+      "_id": "req-domains",
+      "colId": "AISTP-API",
+      "containerId": "fld-questions",
+      "name": "List domains (public)",
+      "url": "{{baseUrl}}/api/questions/domains/",
+      "method": "GET",
+      "sortNum": 10000,
+      "created": "2026-08-27T00:00:00.000Z",
+      "modified": "2026-08-27T00:00:00.000Z",
+      "headers": [],
+      "params": [],
+      "auth": { "type": "none" },
+      "tests": []
+    },
+    {
+      "_id": "req-question-list",
+      "colId": "AISTP-API",
+      "containerId": "fld-questions",
+      "name": "Start session / get questions",
+      "url": "{{baseUrl}}/api/questions/?count=10",
+      "method": "GET",
+      "sortNum": 20000,
+      "created": "2026-08-27T00:00:00.000Z",
+      "modified": "2026-08-27T00:00:00.000Z",
+      "headers": [],
+      "params": [
+        { "name": "count", "value": "10", "isPath": false },
+        { "name": "domains", "value": "1,2", "isPath": false, "isDisabled": true }
+      ],
+      "tests": [
+        { "type": "set-env-var", "custom": "json.session_id", "action": "setto", "value": "sessionId" },
+        { "type": "set-env-var", "custom": "json.questions.0.id", "action": "setto", "value": "questionId" }
+      ]
+    },
+    {
+      "_id": "req-submit",
+      "colId": "AISTP-API",
+      "containerId": "fld-questions",
+      "name": "Submit answer",
+      "url": "{{baseUrl}}/api/questions/submit/",
+      "method": "POST",
+      "sortNum": 30000,
+      "created": "2026-08-27T00:00:00.000Z",
+      "modified": "2026-08-27T00:00:00.000Z",
+      "headers": [{ "name": "Content-Type", "value": "application/json" }],
+      "params": [],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"session_id\": {{sessionId}},\n  \"question_id\": {{questionId}},\n  \"selected_option_id\": 1\n}",
+        "form": []
+      },
+      "tests": []
+    },
+    {
+      "_id": "req-submit-variants",
+      "colId": "AISTP-API",
+      "containerId": "fld-questions",
+      "name": "Submit answer - payload variants (reference)",
+      "url": "{{baseUrl}}/api/questions/submit/",
+      "method": "POST",
+      "sortNum": 35000,
+      "created": "2026-08-27T00:00:00.000Z",
+      "modified": "2026-08-27T00:00:00.000Z",
+      "headers": [{ "name": "Content-Type", "value": "application/json" }],
+      "params": [],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"_comment\": \"send session_id + question_id + ONE answer field matching the question_type\",\n  \"session_id\": {{sessionId}},\n  \"question_id\": {{questionId}},\n  \"selected_option_id\": 1,\n  \"selected_option_ids\": [1, 2],\n  \"text_answer\": \"boundary value analysis\",\n  \"matching_response\": { \"12\": \"Black-box\", \"13\": \"White-box\" }\n}",
+        "form": []
+      },
+      "tests": []
+    },
+    {
+      "_id": "req-session-finish",
+      "colId": "AISTP-API",
+      "containerId": "fld-questions",
+      "name": "Finish session",
+      "url": "{{baseUrl}}/api/questions/sessions/{{sessionId}}/finish/",
+      "method": "POST",
+      "sortNum": 40000,
+      "created": "2026-08-27T00:00:00.000Z",
+      "modified": "2026-08-27T00:00:00.000Z",
+      "headers": [],
+      "params": [],
+      "tests": []
+    },
+    {
+      "_id": "req-admin-q-list",
+      "colId": "AISTP-API",
+      "containerId": "fld-admin-q",
+      "name": "List questions (admin)",
+      "url": "{{baseUrl}}/api/questions/admin/questions/",
+      "method": "GET",
+      "sortNum": 10000,
+      "created": "2026-08-27T00:00:00.000Z",
+      "modified": "2026-08-27T00:00:00.000Z",
+      "headers": [],
+      "params": [],
+      "tests": []
+    },
+    {
+      "_id": "req-admin-q-create",
+      "colId": "AISTP-API",
+      "containerId": "fld-admin-q",
+      "name": "Create question (mcq)",
+      "url": "{{baseUrl}}/api/questions/admin/questions/",
+      "method": "POST",
+      "sortNum": 20000,
+      "created": "2026-08-27T00:00:00.000Z",
+      "modified": "2026-08-27T00:00:00.000Z",
+      "headers": [{ "name": "Content-Type", "value": "application/json" }],
+      "params": [],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"domain\": 1,\n  \"text\": \"Which technique derives test cases from partitions of input data?\",\n  \"difficulty\": \"easy\",\n  \"question_type\": \"mcq\",\n  \"is_active\": true,\n  \"options\": [\n    { \"text\": \"Equivalence partitioning\", \"is_correct\": true },\n    { \"text\": \"Statement coverage\", \"is_correct\": false },\n    { \"text\": \"Exploratory testing\", \"is_correct\": false }\n  ]\n}",
+        "form": []
+      },
+      "tests": [
+        { "type": "set-env-var", "custom": "json.id", "action": "setto", "value": "adminQuestionId" }
+      ]
+    },
+    {
+      "_id": "req-admin-q-get",
+      "colId": "AISTP-API",
+      "containerId": "fld-admin-q",
+      "name": "Retrieve question (admin)",
+      "url": "{{baseUrl}}/api/questions/admin/questions/{{adminQuestionId}}/",
+      "method": "GET",
+      "sortNum": 30000,
+      "created": "2026-08-27T00:00:00.000Z",
+      "modified": "2026-08-27T00:00:00.000Z",
+      "headers": [],
+      "params": [],
+      "tests": []
+    },
+    {
+      "_id": "req-admin-q-update",
+      "colId": "AISTP-API",
+      "containerId": "fld-admin-q",
+      "name": "Update question (PUT)",
+      "url": "{{baseUrl}}/api/questions/admin/questions/{{adminQuestionId}}/",
+      "method": "PUT",
+      "sortNum": 40000,
+      "created": "2026-08-27T00:00:00.000Z",
+      "modified": "2026-08-27T00:00:00.000Z",
+      "headers": [{ "name": "Content-Type", "value": "application/json" }],
+      "params": [],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"domain\": 1,\n  \"text\": \"Updated question text?\",\n  \"difficulty\": \"medium\",\n  \"question_type\": \"mcq\",\n  \"is_active\": true,\n  \"options\": [\n    { \"text\": \"Right answer\", \"is_correct\": true },\n    { \"text\": \"Wrong answer\", \"is_correct\": false }\n  ]\n}",
+        "form": []
+      },
+      "tests": []
+    },
+    {
+      "_id": "req-admin-q-patch",
+      "colId": "AISTP-API",
+      "containerId": "fld-admin-q",
+      "name": "Partial update question (PATCH)",
+      "url": "{{baseUrl}}/api/questions/admin/questions/{{adminQuestionId}}/",
+      "method": "PATCH",
+      "sortNum": 50000,
+      "created": "2026-08-27T00:00:00.000Z",
+      "modified": "2026-08-27T00:00:00.000Z",
+      "headers": [{ "name": "Content-Type", "value": "application/json" }],
+      "params": [],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"is_active\": false\n}",
+        "form": []
+      },
+      "tests": []
+    },
+    {
+      "_id": "req-admin-q-delete",
+      "colId": "AISTP-API",
+      "containerId": "fld-admin-q",
+      "name": "Delete question",
+      "url": "{{baseUrl}}/api/questions/admin/questions/{{adminQuestionId}}/",
+      "method": "DELETE",
+      "sortNum": 60000,
+      "created": "2026-08-27T00:00:00.000Z",
+      "modified": "2026-08-27T00:00:00.000Z",
+      "headers": [],
+      "params": [],
+      "tests": []
+    },
+    {
+      "_id": "req-admin-q-import",
+      "colId": "AISTP-API",
+      "containerId": "fld-admin-q",
+      "name": "Bulk import questions (JSON array body)",
+      "url": "{{baseUrl}}/api/questions/admin/questions/import/",
+      "method": "POST",
+      "sortNum": 70000,
+      "created": "2026-08-27T00:00:00.000Z",
+      "modified": "2026-08-27T00:00:00.000Z",
+      "headers": [{ "name": "Content-Type", "value": "application/json" }],
+      "params": [],
+      "body": {
+        "type": "json",
+        "raw": "[\n  {\n    \"Domain\": \"Fundamentals of Testing\",\n    \"Question\": \"What is the primary purpose of testing?\",\n    \"Type\": \"mcq\",\n    \"Difficulty\": \"easy\",\n    \"Options\": [\"Find defects\", \"Prove no defects\", \"Increase cost\"],\n    \"CorrectAnswer\": \"Find defects\"\n  }\n]",
+        "form": []
+      },
+      "tests": []
+    },
+    {
+      "_id": "req-admin-q-import-file",
+      "colId": "AISTP-API",
+      "containerId": "fld-admin-q",
+      "name": "Bulk import questions (file upload)",
+      "url": "{{baseUrl}}/api/questions/admin/questions/import/",
+      "method": "POST",
+      "sortNum": 80000,
+      "created": "2026-08-27T00:00:00.000Z",
+      "modified": "2026-08-27T00:00:00.000Z",
+      "headers": [],
+      "params": [],
+      "body": {
+        "type": "formdata",
+        "raw": "",
+        "form": [],
+        "files": [
+          { "name": "file", "value": "questions.json" }
+        ],
+        "formEncoded": [
+          { "name": "domain_id", "value": "1", "isDisabled": true }
+        ]
+      },
+      "tests": []
+    },
+    {
+      "_id": "req-admin-gen-list",
+      "colId": "AISTP-API",
+      "containerId": "fld-admin-gen",
+      "name": "List generation jobs",
+      "url": "{{baseUrl}}/api/questions/admin/generate/",
+      "method": "GET",
+      "sortNum": 10000,
+      "created": "2026-08-27T00:00:00.000Z",
+      "modified": "2026-08-27T00:00:00.000Z",
+      "headers": [],
+      "params": [],
+      "tests": []
+    },
+    {
+      "_id": "req-admin-gen-create",
+      "colId": "AISTP-API",
+      "containerId": "fld-admin-gen",
+      "name": "Start generation from document",
+      "url": "{{baseUrl}}/api/questions/admin/generate/",
+      "method": "POST",
+      "sortNum": 20000,
+      "created": "2026-08-27T00:00:00.000Z",
+      "modified": "2026-08-27T00:00:00.000Z",
+      "headers": [],
+      "params": [],
+      "body": {
+        "type": "formdata",
+        "raw": "",
+        "form": [],
+        "files": [
+          { "name": "file", "value": "syllabus.pdf" }
+        ],
+        "formEncoded": [
+          { "name": "question_types", "value": "mcq" },
+          { "name": "question_types", "value": "true_false" },
+          { "name": "domains", "value": "Fundamentals of Testing" },
+          { "name": "target_per_domain", "value": "10" }
+        ]
+      },
+      "tests": [
+        { "type": "set-env-var", "custom": "json.id", "action": "setto", "value": "generationJobId" }
+      ]
+    },
+    {
+      "_id": "req-admin-gen-get",
+      "colId": "AISTP-API",
+      "containerId": "fld-admin-gen",
+      "name": "Poll generation job status",
+      "url": "{{baseUrl}}/api/questions/admin/generate/{{generationJobId}}/",
+      "method": "GET",
+      "sortNum": 30000,
+      "created": "2026-08-27T00:00:00.000Z",
+      "modified": "2026-08-27T00:00:00.000Z",
+      "headers": [],
+      "params": [],
+      "tests": []
+    },
+    {
+      "_id": "req-explain",
+      "colId": "AISTP-API",
+      "containerId": "fld-explain",
+      "name": "Explain a question",
+      "url": "{{baseUrl}}/api/explain/",
+      "method": "POST",
+      "sortNum": 10000,
+      "created": "2026-08-27T00:00:00.000Z",
+      "modified": "2026-08-27T00:00:00.000Z",
+      "headers": [{ "name": "Content-Type", "value": "application/json" }],
+      "params": [],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"question_id\": {{questionId}}\n}",
+        "form": []
+      },
+      "tests": []
+    },
+    {
+      "_id": "req-analytics-dashboard",
+      "colId": "AISTP-API",
+      "containerId": "fld-analytics",
+      "name": "Dashboard",
+      "url": "{{baseUrl}}/api/analytics/dashboard/",
+      "method": "GET",
+      "sortNum": 10000,
+      "created": "2026-08-27T00:00:00.000Z",
+      "modified": "2026-08-27T00:00:00.000Z",
+      "headers": [],
+      "params": [],
+      "tests": []
+    }
+  ]
+}

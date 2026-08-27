@@ -10,6 +10,8 @@ import threading
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import generics, mixins, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import JSONParser, MultiPartParser
@@ -88,6 +90,15 @@ class QuestionListView(APIView):
     """
     permission_classes = [permissions.IsAuthenticated]
 
+    @extend_schema(
+        parameters=[
+            OpenApiParameter("count", OpenApiTypes.INT, description="Questions to serve (1-40, default 10)."),
+            OpenApiParameter("domains", OpenApiTypes.STR, description="Comma-separated domain ids to filter by."),
+        ],
+        responses=OpenApiTypes.OBJECT,
+        summary="Start a practice session",
+        description="Creates a PracticeSession and returns its id plus a stratified set of active questions.",
+    )
     def get(self, request):
         try:
             count = int(request.query_params.get("count", DEFAULT_SESSION_SIZE))
@@ -140,6 +151,16 @@ class AnswerSubmitView(APIView):
     submission dict, and records the matching Attempt field(s)."""
     permission_classes = [permissions.IsAuthenticated]
 
+    @extend_schema(
+        request=AnswerSubmitSerializer,
+        responses=OpenApiTypes.OBJECT,
+        summary="Submit an answer",
+        description=(
+            "Scores one answer and records an Attempt. Send session_id + question_id plus "
+            "exactly one answer field for the question's type (selected_option_id, "
+            "selected_option_ids, text_answer, or matching_response)."
+        ),
+    )
     def post(self, request):
         serializer = AnswerSubmitSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -227,6 +248,12 @@ class SessionFinishView(APIView):
     existing result instead of re-scoring."""
     permission_classes = [permissions.IsAuthenticated]
 
+    @extend_schema(
+        request=None,
+        responses=OpenApiTypes.OBJECT,
+        summary="Finish a practice session",
+        description="Marks the session finished and returns its final score. Idempotent.",
+    )
     def post(self, request, session_id):
         session = get_object_or_404(PracticeSession, id=session_id, user=request.user)
 

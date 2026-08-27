@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     # Third-party
     'rest_framework',
     'rest_framework_simplejwt',
+    'drf_spectacular',
     'corsheaders',
     # Project apps (one per ERD domain — Section 4.7 / Figure 8)
     'accounts',
@@ -84,6 +85,33 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "login": "20/min",
         "explain": "10/min",
+    },
+    # OpenAPI schema generation for Swagger UI / ReDoc (drf-spectacular).
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+}
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "AISTP Platform API",
+    "DESCRIPTION": (
+        "AI-assisted ISTQB study platform -- registration/auth, question "
+        "delivery and scoring, AI answer explanations, domain analytics, "
+        "and admin question CRUD / RAG generation."
+    ),
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+    "ENUM_NAME_OVERRIDES": {
+        "QuestionTypeEnum": "questions.models.Question.QuestionType",
+    },
+    # Group endpoints in the UI by their first path segment after /api/.
+    "TAGS": [
+        {"name": "auth", "description": "Registration, login, JWT refresh, current user."},
+        {"name": "questions", "description": "Session delivery, answer submission, domains."},
+        {"name": "explain", "description": "AI-generated answer explanations (cached)."},
+        {"name": "analytics", "description": "Per-domain accuracy dashboard."},
+    ],
+    "SWAGGER_UI_SETTINGS": {
+        "persistAuthorization": True,
+        "displayRequestDuration": True,
     },
 }
 

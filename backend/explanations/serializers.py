@@ -23,7 +23,7 @@ class AIExplanationSerializer(serializers.ModelSerializer):
         model = AIExplanation
         fields = ("explanation", "is_fallback")
 
-    def get_explanation(self, obj):
+    def get_explanation(self, obj) -> str:
         text = obj.explanation_text
         # A short-lived earlier version of this feature cached explanations
         # as {"items": [...], "summary": ...} JSON instead of plain text --
@@ -47,5 +47,5 @@ class AIExplanationSerializer(serializers.ModelSerializer):
             lines.append(parsed["summary"])
         return "\n".join(lines) if lines else text
 
-    def get_is_fallback(self, obj):
+    def get_is_fallback(self, obj) -> bool:
         return False
