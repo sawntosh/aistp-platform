@@ -1,6 +1,8 @@
 import { Check } from "lucide-react";
 import { getDomainColor } from "../utils/domainColors";
 import { cn } from "../lib/cn";
+import { confidenceLabel } from "../lib/confidence";
+import ConfidenceSelector from "./ConfidenceSelector";
 import Button from "./ui/Button";
 import Badge from "./ui/Badge";
 import { Card } from "./ui/Card";
@@ -197,11 +199,17 @@ export default function QuestionCard({
   onNext,
   isLastQuestion,
   hideAdvance = false,
+  confidence = null,
+  onConfidenceChange,
+  confidenceRequired = false,
 }) {
   if (!question) return null;
 
   const domainColor = getDomainColor(question.domain?.name);
-  const canSubmit = isAnswerReady(question, answer);
+  const answerReady = isAnswerReady(question, answer);
+  // Test Mode: an answer alone isn't enough -- the learner must also
+  // rate their confidence before the answer can be submitted.
+  const canSubmit = answerReady && (!confidenceRequired || confidence != null);
 
   return (
     <Card className="p-6">
@@ -232,6 +240,15 @@ export default function QuestionCard({
         <Matching question={question} answer={answer} onAnswerChange={onAnswerChange} isAnswered={isAnswered} result={result} />
       )}
 
+      {!isAnswered && confidenceRequired && answerReady && (
+        <ConfidenceSelector
+          value={confidence}
+          onChange={onConfidenceChange}
+          disabled={isSubmitting}
+          idPrefix={`confidence-${question.id}`}
+        />
+      )}
+
       {!isAnswered && (
         <div className="mt-5 flex gap-3">
           {canSkip && (
@@ -250,6 +267,14 @@ export default function QuestionCard({
           <p className="rounded-md bg-surface-muted px-4 py-2 text-body-sm text-text-secondary">
             Answer recorded — you&apos;ll see the correct answer and explanation after you finish the test.
           </p>
+          {confidence != null && (
+            <p className="mt-2 text-caption text-text-muted">
+              Your confidence:{" "}
+              <span className="font-medium text-text-secondary">
+                {confidence} — {confidenceLabel(confidence)}
+              </span>
+            </p>
+          )}
           {!hideAdvance && (
             <Button variant="secondary" onClick={onNext} className="mt-3 w-full">
               {isLastQuestion ? "Finish test" : "Next question"}

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/router";
-import { Brain, Check, ClipboardCheck, FolderKanban, Puzzle, RefreshCw, Search, Sliders, Target, Wrench } from "lucide-react";
+import { AlertTriangle, Brain, Check, ClipboardCheck, FolderKanban, Lightbulb, Puzzle, RefreshCw, Search, Sliders, Target, Wrench } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { usePracticeSession } from "../context/PracticeSessionContext";
 import {
@@ -94,6 +94,11 @@ export default function PracticePage() {
   const [totalCount, setTotalCount] = useState(0);
   const [sessionId, setSessionId] = useState(null);
   const [answersById, setAnswersById] = useState({});
+  // Test Mode only: the learner's 1-5 confidence per question, keyed by
+  // question id like answersById so it survives navigation. Required
+  // before a Test Mode answer can be submitted; cleared if the answer
+  // changes so stale confidence never rides a new answer.
+  const [confidenceById, setConfidenceById] = useState({});
   // Practice Mode only -- in Test Mode the backend withholds correctness on
   // submit (see AnswerSubmitView), so resultsById stays empty and the real
   // answers only arrive with `testReview` once the session finishes.
@@ -183,6 +188,7 @@ export default function PracticePage() {
       setCurrentPage(0);
       setSessionId(data.session_id);
       setAnswersById({});
+      setConfidenceById({});
       setResultsById({});
       setSubmittedIds(new Set());
       setCorrectCount(0);
@@ -218,6 +224,20 @@ export default function PracticePage() {
   function handleAnswerChange(questionId, nextAnswer) {
     if (submittedIds.has(questionId)) return;
     setAnswersById((prev) => ({ ...prev, [questionId]: nextAnswer }));
+    // A changed answer invalidates any confidence rating already made for
+    // the old answer -- the learner must re-rate the new one.
+    setConfidenceById((prev) => {
+      if (prev[questionId] == null) return prev;
+      const next = { ...prev };
+      delete next[questionId];
+      return next;
+    });
+    setLoadError("");
+  }
+
+  function handleConfidenceChange(questionId, level) {
+    if (submittedIds.has(questionId)) return;
+    setConfidenceById((prev) => ({ ...prev, [questionId]: level }));
     setLoadError("");
   }
 
@@ -275,12 +295,22 @@ export default function PracticePage() {
     if (submittedIds.has(questionId) || submittingId) return;
     const question = questions.find((q) => q.id === questionId);
     if (!question) return;
+    const confidence = confidenceById[questionId] ?? null;
+    // Test Mode: confidence is mandatory -- the QuestionCard also blocks
+    // the button, this is the belt-and-braces guard.
+    if (mode === "test" && confidence == null) {
+      setLoadError("Select how confident you are before submitting.");
+      return;
+    }
     setSubmittingId(questionId);
     try {
       const data = await submitAnswer({
         sessionId,
         questionId,
-        answer: buildAnswerPayload(question, answersById[questionId]),
+        answer: {
+          ...buildAnswerPayload(question, answersById[questionId]),
+          ...(confidence != null ? { confidence } : {}),
+        },
       });
       setSubmittedIds((prev) => new Set(prev).add(questionId));
       if (mode !== "test") {
@@ -547,9 +577,38 @@ export default function PracticePage() {
                       <span className="text-caption font-medium uppercase tracking-wide text-text-muted">Question {index + 1}</span>
                     </div>
                     <p className="mb-2 text-body-sm font-medium text-text-primary">{item.text}</p>
-                    <p className="mb-3 text-body-sm text-text-secondary">
+                    <p className="mb-1 text-body-sm text-text-secondary">
                       Your answer: <span className="font-medium text-text-primary">{describeYourAnswer(item)}</span>
                     </p>
+                    {item.confidence != null && (
+                      <p className="mb-3 text-body-sm text-text-secondary">
+                        Your confidence:{" "}
+                        <span className="font-medium text-text-primary">
+                          {item.confidence} — {item.confidence_label}
+                        </span>
+                      </p>
+                    )}
+
+                    {item.high_confidence_mistake && (
+                      <div className="mb-3 flex items-start gap-2 rounded-md border border-warning/30 bg-warning-muted p-3 text-body-sm text-text-secondary">
+                        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
+                        <span>
+                          <span className="font-semibold text-text-primary">High-confidence mistake.</span> You were
+                          very confident in this answer, but it was incorrect. Review the explanation below to
+                          strengthen your understanding.
+                        </span>
+                      </div>
+                    )}
+                    {item.low_confidence_correct && (
+                      <div className="mb-3 flex items-start gap-2 rounded-md border border-border bg-surface-muted p-3 text-body-sm text-text-secondary">
+                        <Lightbulb className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+                        <span>
+                          <span className="font-semibold text-text-primary">Correct, but you weren&apos;t sure.</span>{" "}
+                          Revisit this concept to turn a lucky guess into solid knowledge.
+                        </span>
+                      </div>
+                    )}
+
                     <FeedbackPanel
                       isCorrect={item.is_correct}
                       correctOptionText={describeCorrectAnswer(
@@ -636,6 +695,9 @@ export default function PracticePage() {
                 result={result}
                 mode={mode}
                 hideAdvance
+                confidenceRequired={mode === "test"}
+                confidence={confidenceById[question.id] ?? null}
+                onConfidenceChange={(level) => handleConfidenceChange(question.id, level)}
               />
 
               {mode === "practice" && result && (
