@@ -6,6 +6,7 @@ import hashlib
 
 from django.db import connection, transaction
 from django.shortcuts import get_object_or_404
+from drf_spectacular.utils import extend_schema
 from rest_framework import permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -89,6 +90,15 @@ class ExplainView(APIView):
     permission_classes = [permissions.IsAuthenticated]
     throttle_scope = "explain"
 
+    @extend_schema(
+        request=ExplainRequestSerializer,
+        responses=AIExplanationSerializer,
+        summary="AI explanation for a question's answer",
+        description=(
+            "Returns a cached AI explanation for the question, generating one via Groq "
+            "on a cache miss. Falls back to deterministic text if Groq is unavailable."
+        ),
+    )
     def post(self, request):
         request_serializer = ExplainRequestSerializer(data=request.data)
         request_serializer.is_valid(raise_exception=True)
