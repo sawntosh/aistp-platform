@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import { useAuth } from "../context/AuthContext";
 import { getErrorMessage } from "../services/apiClient";
@@ -81,6 +81,10 @@ export default function AdminPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [domainFilter, setDomainFilter] = useState("all");
+  const [page, setPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const PAGE_SIZE = 25;
+  const pageCount = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
 
   const [form, setForm] = useState(null); // null = form closed
   const [formError, setFormError] = useState("");
@@ -110,9 +114,13 @@ export default function AdminPage() {
     setIsLoading(true);
     setLoadError("");
     try {
-      const [domainList, questionList] = await Promise.all([fetchDomains(), fetchAdminQuestions()]);
+      const [domainList, questionPage] = await Promise.all([
+        fetchDomains(),
+        fetchAdminQuestions({ page, pageSize: PAGE_SIZE, domain: domainFilter }),
+      ]);
       setDomains(domainList);
-      setQuestions(questionList);
+      setQuestions(questionPage.results);
+      setTotalCount(questionPage.count);
     } catch (err) {
       setLoadError(getErrorMessage(err, "Couldn't load questions right now."));
     } finally {
@@ -122,7 +130,7 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (user?.role === "admin") loadData();
-  }, [user]);
+  }, [user, page, domainFilter]);
 
   // Poll the generation job every 3s until it lands on completed/failed,
   // then refresh the question list once (self-rescheduling effect: each
@@ -143,11 +151,6 @@ export default function AdminPage() {
     }, 3000);
     return () => clearTimeout(timer);
   }, [genJob]);
-
-  const filteredQuestions = useMemo(() => {
-    if (domainFilter === "all") return questions;
-    return questions.filter((q) => String(q.domain) === String(domainFilter));
-  }, [questions, domainFilter]);
 
   function domainName(id) {
     return domains.find((d) => d.id === id)?.name ?? `Domain #${id}`;
@@ -364,7 +367,11 @@ export default function AdminPage() {
     if (!window.confirm("Delete this question? This can't be undone.")) return;
     try {
       await deleteQuestion(question.id);
-      setQuestions((qs) => qs.filter((q) => q.id !== question.id));
+      if (questions.length === 1 && page > 1) {
+        setPage((p) => p - 1); // last row on this page -- step back
+      } else {
+        loadData(); // refresh so the next page's rows pull up
+      }
     } catch (err) {
       window.alert(getErrorMessage(err, "Couldn't delete this question."));
     }
@@ -373,7 +380,7 @@ export default function AdminPage() {
   if (isAuthLoading || !user || user.role !== "admin") return null;
 
   return (
-    <div className="min-h-[calc(100vh-49px)] bg-gray-50 px-4 py-8 sm:px-8">
+    <div className="min-h-[calc(100vh-49px)] sm:min-h-screen bg-gray-50 px-4 py-8 sm:px-8">
       <div className="mx-auto max-w-5xl space-y-8">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Question Bank</h1>
@@ -557,11 +564,14 @@ export default function AdminPage() {
         {/* Manage questions */}
         <section className="rounded-xl bg-white p-6 shadow">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-lg font-semibold text-gray-900">Questions ({filteredQuestions.length})</h2>
+            <h2 className="text-lg font-semibold text-gray-900">Questions ({totalCount})</h2>
             <div className="flex items-center gap-3">
               <select
                 value={domainFilter}
-                onChange={(e) => setDomainFilter(e.target.value)}
+                onChange={(e) => {
+                  setPage(1);
+                  setDomainFilter(e.target.value);
+                }}
                 className="rounded-lg border border-gray-200 px-3 py-2 text-sm"
               >
                 <option value="all">All domains</option>
@@ -599,7 +609,7 @@ export default function AdminPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredQuestions.map((q) => (
+                  {questions.map((q) => (
                     <tr key={q.id} className="border-b border-gray-100">
                       <td className="max-w-md truncate py-2 pr-4 text-gray-900">{q.text}</td>
                       <td className="py-2 pr-4 text-gray-600">{domainName(q.domain)}</td>
@@ -622,7 +632,7 @@ export default function AdminPage() {
                       </td>
                     </tr>
                   ))}
-                  {!filteredQuestions.length && (
+                  {!questions.length && (
                     <tr>
                       <td colSpan={6} className="py-6 text-center text-gray-400">
                         No questions yet.
@@ -631,6 +641,32 @@ export default function AdminPage() {
                   )}
                 </tbody>
               </table>
+
+              {totalCount > 0 && (
+                <div className="mt-4 flex items-center justify-between text-sm text-gray-600">
+                  <span>
+                    Page {page} of {pageCount}
+                  </span>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      disabled={page <= 1}
+                      className="rounded-lg border border-gray-200 px-3 py-1.5 font-medium disabled:opacity-40"
+                    >
+                      Previous
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+                      disabled={page >= pageCount}
+                      className="rounded-lg border border-gray-200 px-3 py-1.5 font-medium disabled:opacity-40"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </section>

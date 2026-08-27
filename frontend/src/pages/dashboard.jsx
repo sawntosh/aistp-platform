@@ -114,7 +114,7 @@ export default function DashboardPage() {
   if (isAuthLoading || !user) return null;
 
   return (
-    <div className="min-h-[calc(100vh-57px)] bg-background px-4 py-10 sm:px-6">
+    <div className="min-h-[calc(100vh-57px)] sm:min-h-screen bg-background px-4 py-10 sm:px-6">
       <div className="mx-auto max-w-5xl">
         <div className="mb-8">
           <h1 className="text-h1 text-text-primary">

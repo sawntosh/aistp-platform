@@ -58,7 +58,7 @@ function NavLink({ href, label, icon: Icon, isActive, disabled }) {
   );
 }
 
-export default function NavBar() {
+export default function NavBar({ compact = false }) {
   const router = useRouter();
   const { user, logout } = useAuth();
   const { isActive: isSessionActive } = usePracticeSession();
@@ -74,7 +74,14 @@ export default function NavBar() {
   const links = user?.role === "admin" ? [...LINKS, { href: "/admin", label: "Admin", icon: ShieldCheck }] : LINKS;
 
   return (
-    <nav className="sticky top-0 z-40 border-b border-border bg-surface/95 backdrop-blur supports-[backdrop-filter]:bg-surface/80">
+    <nav
+      className={cn(
+        "sticky top-0 z-40 border-b border-border bg-surface/95 backdrop-blur supports-[backdrop-filter]:bg-surface/80",
+        // For signed-in users the left Sidebar owns navigation on `sm`+, so
+        // this header only shows on mobile.
+        compact && "sm:hidden"
+      )}
+    >
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6">
         {isSessionActive ? (
           <span title={LOCKED_TITLE}>
@@ -97,7 +104,6 @@ export default function NavBar() {
                   isActive={router.pathname === link.href || router.pathname.startsWith(`${link.href}/`)}
                 />
               ))}
-              <NavLink href="/about" label="About" icon={Info} disabled={isSessionActive} isActive={router.pathname === "/about"} />
             </div>
             <ThemeToggle className="ml-1" />
             <UserMenu name={user.username} onLogout={handleLogout} disabled={isSessionActive} disabledTitle={LOCKED_TITLE} />

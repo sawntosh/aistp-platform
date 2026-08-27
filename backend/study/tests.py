@@ -221,7 +221,9 @@ class TestModeRegressionTests(TestCase):
         self.assertEqual(finish_resp.json()["score"], 1)
 
     def test_test_mode_analytics_still_update(self):
-        list_resp = self.client.get("/api/questions/?count=1&mode=practice")
+        # Only Test Mode feeds PerformanceAnalytics -- Practice Mode is
+        # excluded (see AnswerSubmitView).
+        list_resp = self.client.get("/api/questions/?count=1&mode=test")
         session_id = list_resp.json()["session_id"]
         self.client.post(
             "/api/questions/submit/",

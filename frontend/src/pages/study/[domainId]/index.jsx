@@ -49,7 +49,7 @@ export default function StudyDomainTopicsPage() {
   if (isAuthLoading || !user) return null;
 
   return (
-    <div className="min-h-[calc(100vh-57px)] bg-background px-4 py-10 sm:px-6">
+    <div className="min-h-[calc(100vh-57px)] sm:min-h-screen bg-background px-4 py-10 sm:px-6">
       <div className="mx-auto max-w-2xl">
         {data === null && !loadError && (
           <div className="space-y-3" aria-busy="true" aria-label="Loading topics">

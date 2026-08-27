@@ -5,7 +5,14 @@ import { cn } from "../lib/cn";
 
 // Clicking the avatar opens a small card with the user's name and a log out
 // action -- closes on an outside click, Escape, or after logging out.
-export default function UserMenu({ name, onLogout, disabled = false, disabledTitle }) {
+export default function UserMenu({
+  name,
+  onLogout,
+  disabled = false,
+  disabledTitle,
+  openUp = false,
+  align = "right",
+}) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef(null);
 
@@ -54,7 +61,18 @@ export default function UserMenu({ name, onLogout, disabled = false, disabledTit
       {isOpen && (
         <div
           role="menu"
-          className="absolute right-0 top-full z-50 mt-2 w-56 origin-top-right rounded-lg border border-border bg-surface p-2 shadow-lg animate-fade-in"
+          className={cn(
+            "absolute z-50 w-56 rounded-lg border border-border bg-surface p-2 shadow-lg animate-fade-in",
+            align === "left" ? "left-0" : "right-0",
+            openUp ? "bottom-full mb-2" : "top-full mt-2",
+            openUp
+              ? align === "left"
+                ? "origin-bottom-left"
+                : "origin-bottom-right"
+              : align === "left"
+                ? "origin-top-left"
+                : "origin-top-right"
+          )}
         >
           <div className="flex items-center gap-3 rounded-md px-2 py-2">
             <UserAvatar name={name} size="lg" />

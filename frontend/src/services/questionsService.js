@@ -40,8 +40,12 @@ export async function fetchDomains() {
 
 // -- Admin: question CRUD ---------------------------------------------------
 
-export async function fetchAdminQuestions() {
-  return apiFetch("/questions/admin/questions/");
+// Paginated. Returns { count, next, previous, results }.
+// `domain` (a domain id) filters server-side across the whole bank.
+export async function fetchAdminQuestions({ page = 1, pageSize = 25, domain = null } = {}) {
+  const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
+  if (domain && domain !== "all") params.set("domain", String(domain));
+  return apiFetch(`/questions/admin/questions/?${params.toString()}`);
 }
 
 export async function createQuestion(payload) {

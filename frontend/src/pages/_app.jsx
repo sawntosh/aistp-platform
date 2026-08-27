@@ -6,21 +6,30 @@ import { sans, serif } from "../lib/fonts";
 import { AuthProvider, useAuth } from "../context/AuthContext";
 import { PracticeSessionProvider } from "../context/PracticeSessionContext";
 import NavBar from "../components/NavBar";
+import Sidebar, { SIDEBAR_WIDTH_CLASS } from "../components/Sidebar";
 import MobileTabBar from "../components/MobileTabBar";
 
 function Shell({ Component, pageProps }) {
   const router = useRouter();
   const { user } = useAuth();
   const isAuthPage = router.pathname === "/login" || router.pathname === "/register";
-  const showMobileNav = Boolean(user) && !isAuthPage;
+  const isAppUser = Boolean(user) && !isAuthPage;
 
   return (
     <>
-      <NavBar />
-      <div className={showMobileNav ? "pb-16 sm:pb-0" : ""}>
+      {isAppUser ? (
+        <>
+          <Sidebar />
+          {/* Mobile-only header (logo + user menu + theme); Sidebar covers sm+ */}
+          <NavBar compact />
+        </>
+      ) : (
+        <NavBar />
+      )}
+      <div className={[isAppUser && SIDEBAR_WIDTH_CLASS, isAppUser && "pb-16 sm:pb-0"].filter(Boolean).join(" ")}>
         <Component {...pageProps} />
       </div>
-      {showMobileNav && <MobileTabBar />}
+      {isAppUser && <MobileTabBar />}
     </>
   );
 }

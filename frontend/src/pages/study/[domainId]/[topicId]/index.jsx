@@ -160,7 +160,7 @@ export default function StudyTopicPage() {
   }
 
   return (
-    <div className="min-h-[calc(100vh-57px)] bg-background px-4 py-8 sm:px-6">
+    <div className="min-h-[calc(100vh-57px)] sm:min-h-screen bg-background px-4 py-8 sm:px-6">
       <div className="mx-auto max-w-5xl">
         <div className="flex items-center gap-3">
           <Link

@@ -40,7 +40,7 @@ export default function StudyHomePage() {
   if (isAuthLoading || !user) return null;
 
   return (
-    <div className="min-h-[calc(100vh-57px)] bg-background px-4 py-10 sm:px-6">
+    <div className="min-h-[calc(100vh-57px)] sm:min-h-screen bg-background px-4 py-10 sm:px-6">
       <div className="mx-auto max-w-4xl">
         <PageHeader
           eyebrow="Study Mode"

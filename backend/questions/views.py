@@ -24,6 +24,7 @@ from services.scoring_service import score_answer
 
 from .imports import import_questions, validate_rows
 from .models import AnswerOption, Attempt, Domain, GenerationJob, PracticeSession, Question
+from .pagination import QuestionPagination
 from .serializers import (
     AnswerSubmitSerializer,
     DomainSerializer,
@@ -128,8 +129,10 @@ class QuestionListView(APIView):
 
 
 class AnswerSubmitView(APIView):
-    """FR-03: score the submitted answer, write an Attempt row, and
-    update PerformanceAnalytics for the relevant domain.
+    """FR-03: score the submitted answer, write an Attempt row, and --
+    for Test Mode sessions only -- update PerformanceAnalytics for the
+    relevant domain. Practice Mode attempts are recorded as Attempt rows
+    but deliberately left out of the analytics aggregates.
 
     The expected payload shape depends on the question's question_type
     -- see AnswerSubmitSerializer -- so this view pulls out the right
@@ -200,9 +203,13 @@ class AnswerSubmitView(APIView):
         if selected_options is not None:
             attempt.selected_options.set(selected_options)
 
-        record_attempt(request.user, question.domain, is_correct)
-
         if session.mode == PracticeSession.Mode.TEST:
+            # Only Test Mode moves the learner's tracked performance
+            # analytics (FR-05/FR-07). Practice Mode is low-stakes
+            # rehearsal and is deliberately kept out of the per-domain
+            # accuracy aggregates.
+            record_attempt(request.user, question.domain, is_correct)
+
             # Exam simulation: don't leak correctness or the answer key via
             # the network response -- SessionReviewView reveals everything
             # once the whole session is finished.
@@ -312,12 +319,28 @@ class SessionReviewView(APIView):
 
 
 class AdminQuestionViewSet(viewsets.ModelViewSet):
-    """FR-06: admin-only CRUD on questions/answer options."""
+    """FR-06: admin-only CRUD on questions/answer options.
+
+    The list action is paginated (QuestionPagination) and accepts an
+    optional ?domain=<id> filter so the admin table can page and filter
+    across the whole bank instead of pulling every row at once.
+    """
     permission_classes = [permissions.IsAuthenticated, IsAdminRole]
-    queryset = Question.objects.all().select_related("domain").prefetch_related(
-        "options", "blank_answers", "matching_pairs"
+    pagination_class = QuestionPagination
+    queryset = (
+        Question.objects.all()
+        .select_related("domain")
+        .prefetch_related("options", "blank_answers", "matching_pairs")
+        .order_by("-id")
     )
     serializer_class = QuestionAdminSerializer
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        domain_id = self.request.query_params.get("domain")
+        if domain_id:
+            queryset = queryset.filter(domain_id=domain_id)
+        return queryset
 
     @action(detail=False, methods=["post"], url_path="import", parser_classes=[MultiPartParser, JSONParser])
     def import_from_json(self, request):

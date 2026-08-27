@@ -84,25 +84,26 @@ export default function PracticePage() {
   const [domainAccuracy, setDomainAccuracy] = useState(null);
   const [analyticsStatus, setAnalyticsStatus] = useState("guest"); // guest | loading | ready
 
-  // `queue` holds the questions still owed an answer, in the order they'll be
-  // shown. Skipping a question moves it from the front to the back instead
-  // of removing it, so it comes back around later in the same session.
-  const [queue, setQueue] = useState([]);
+  // The full ordered question list for the session. Questions stay in place
+  // (unlike the old one-at-a-time queue) so the learner can page back and
+  // forth freely; PER_PAGE of them show at once. Per-question answer /
+  // result / submitted state lives in the *ById maps, keyed by question id.
+  const PER_PAGE = 5;
+  const [questions, setQuestions] = useState([]);
+  const [currentPage, setCurrentPage] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
-  const [skippedIds, setSkippedIds] = useState(() => new Set());
   const [sessionId, setSessionId] = useState(null);
-  const [answer, setAnswer] = useState(null);
-  const [result, setResult] = useState(null);
-  // Test Mode: the backend withholds correctness on submit (see
-  // AnswerSubmitView), so this just tracks "moved past this question" --
-  // `result` stays null the whole session and correctness is only known
-  // once `testReview` loads at the end.
-  const [hasSubmitted, setHasSubmitted] = useState(false);
+  const [answersById, setAnswersById] = useState({});
+  // Practice Mode only -- in Test Mode the backend withholds correctness on
+  // submit (see AnswerSubmitView), so resultsById stays empty and the real
+  // answers only arrive with `testReview` once the session finishes.
+  const [resultsById, setResultsById] = useState({});
+  const [submittedIds, setSubmittedIds] = useState(() => new Set());
   const [correctCount, setCorrectCount] = useState(0);
   const [finalScore, setFinalScore] = useState(null);
   const [testReview, setTestReview] = useState(null);
   const [isLoadingQuestions, setIsLoadingQuestions] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submittingId, setSubmittingId] = useState(null);
   const [loadError, setLoadError] = useState("");
   const [isSessionComplete, setIsSessionComplete] = useState(false);
   const [showEndConfirm, setShowEndConfirm] = useState(false);
@@ -177,13 +178,13 @@ export default function PracticePage() {
     setIsLoadingQuestions(true);
     try {
       const data = await fetchPracticeQuestions(sessionLength, selectedDomainIds, mode);
-      setQueue(data.questions);
+      setQuestions(data.questions);
       setTotalCount(data.questions.length);
-      setSkippedIds(new Set());
+      setCurrentPage(0);
       setSessionId(data.session_id);
-      setAnswer(null);
-      setResult(null);
-      setHasSubmitted(false);
+      setAnswersById({});
+      setResultsById({});
+      setSubmittedIds(new Set());
       setCorrectCount(0);
       setFinalScore(null);
       setTestReview(null);
@@ -198,26 +199,25 @@ export default function PracticePage() {
 
   function backToSetup() {
     setSessionStarted(false);
-    setQueue([]);
+    setQuestions([]);
     setIsSessionComplete(false);
     setLoadError("");
   }
 
-  const currentQuestion = queue[0];
-  const isLastQuestion = queue.length === 1;
-  const currentPosition = totalCount - queue.length + 1;
+  const pageCount = Math.max(1, Math.ceil(questions.length / PER_PAGE));
+  const pageStart = currentPage * PER_PAGE;
+  const pageQuestions = questions.slice(pageStart, pageStart + PER_PAGE);
+  const answeredCount = submittedIds.size;
+  const allAnswered = questions.length > 0 && answeredCount === questions.length;
 
-  function handleAnswerChange(nextAnswer) {
-    if (result || hasSubmitted) return;
-    setAnswer(nextAnswer);
+  function goToQuestion(index) {
+    setCurrentPage(Math.floor(index / PER_PAGE));
     setLoadError("");
   }
 
-  function handleSkip() {
-    if (result || hasSubmitted || queue.length <= 1) return;
-    setQueue((q) => [...q.slice(1), q[0]]);
-    setSkippedIds((s) => new Set(s).add(currentQuestion.id));
-    setAnswer(null);
+  function handleAnswerChange(questionId, nextAnswer) {
+    if (submittedIds.has(questionId)) return;
+    setAnswersById((prev) => ({ ...prev, [questionId]: nextAnswer }));
     setLoadError("");
   }
 
@@ -271,36 +271,37 @@ export default function PracticePage() {
     }
   }
 
-  async function handleSubmit() {
-    if (result || hasSubmitted || isSubmitting) return;
-    setIsSubmitting(true);
+  async function handleSubmit(questionId) {
+    if (submittedIds.has(questionId) || submittingId) return;
+    const question = questions.find((q) => q.id === questionId);
+    if (!question) return;
+    setSubmittingId(questionId);
     try {
       const data = await submitAnswer({
         sessionId,
-        questionId: currentQuestion.id,
-        answer: buildAnswerPayload(currentQuestion, answer),
+        questionId,
+        answer: buildAnswerPayload(question, answersById[questionId]),
       });
-      if (mode === "test") {
-        // AnswerSubmitView withholds correctness in Test Mode -- just mark
-        // this question as submitted and move on; the real answer shows up
-        // in `testReview` once the session finishes.
-        setHasSubmitted(true);
-      } else {
-        setResult({
-          isCorrect: data.is_correct,
-          correctOptionId: data.correct_option_id,
-          correctOptionIds: data.correct_option_ids,
-          correctOptionTexts: data.correct_option_texts,
-          correctAnswer: data.correct_answer,
-          correctPairing: data.correct_pairing,
-          correctAnswerText: describeCorrectAnswer(currentQuestion, data),
-        });
+      setSubmittedIds((prev) => new Set(prev).add(questionId));
+      if (mode !== "test") {
+        setResultsById((prev) => ({
+          ...prev,
+          [questionId]: {
+            isCorrect: data.is_correct,
+            correctOptionId: data.correct_option_id,
+            correctOptionIds: data.correct_option_ids,
+            correctOptionTexts: data.correct_option_texts,
+            correctAnswer: data.correct_answer,
+            correctPairing: data.correct_pairing,
+            correctAnswerText: describeCorrectAnswer(question, data),
+          },
+        }));
         if (data.is_correct) setCorrectCount((c) => c + 1);
       }
     } catch {
       setLoadError("Couldn't submit your answer. Please try again.");
     } finally {
-      setIsSubmitting(false);
+      setSubmittingId(null);
     }
   }
 
@@ -321,27 +322,15 @@ export default function PracticePage() {
     }
   }
 
-  async function handleNext() {
-    const remaining = queue.length - 1;
-    setSkippedIds((s) => {
-      if (!s.has(currentQuestion.id)) return s;
-      const next = new Set(s);
-      next.delete(currentQuestion.id);
-      return next;
-    });
-    setQueue((q) => q.slice(1));
-    if (remaining <= 0) {
-      await finalizeSession();
-      setIsSessionComplete(true);
-      return;
+  function requestFinish() {
+    if (allAnswered) {
+      endSession();
+    } else {
+      setShowEndConfirm(true);
     }
-    setAnswer(null);
-    setResult(null);
-    setHasSubmitted(false);
-    setLoadError("");
   }
 
-  async function handleEndPractice() {
+  async function endSession() {
     setShowEndConfirm(false);
     await finalizeSession();
     setIsSessionComplete(true);
@@ -351,7 +340,7 @@ export default function PracticePage() {
 
   if (!sessionStarted) {
     return (
-      <div className="min-h-[calc(100vh-57px)] bg-background px-4 py-10 sm:px-6">
+      <div className="min-h-[calc(100vh-57px)] sm:min-h-screen bg-background px-4 py-10 sm:px-6">
         <div className="mx-auto grid max-w-5xl grid-cols-1 gap-8 lg:grid-cols-[1fr_320px] lg:items-start">
         <div className="space-y-8">
           <div>
@@ -531,7 +520,7 @@ export default function PracticePage() {
     const scoreTone = scorePercent >= 70 ? "text-success" : scorePercent >= 40 ? "text-warning" : "text-error";
 
     return (
-      <div className="min-h-[calc(100vh-57px)] bg-background px-4 py-10 sm:px-6">
+      <div className="min-h-[calc(100vh-57px)] sm:min-h-screen bg-background px-4 py-10 sm:px-6">
         <div className="mx-auto max-w-2xl space-y-6">
           <Card className="p-8 text-center animate-pop">
             <h1 className="mb-2 text-h1 text-text-primary">{mode === "test" ? "Test complete" : "Session complete"}</h1>
@@ -581,15 +570,16 @@ export default function PracticePage() {
     );
   }
 
-  const isCurrentAnswered = mode === "test" ? hasSubmitted : Boolean(result);
-  const progressPercent = totalCount ? ((currentPosition - 1 + (isCurrentAnswered ? 1 : 0)) / totalCount) * 100 : 0;
+  const progressPercent = totalCount ? (answeredCount / totalCount) * 100 : 0;
+  const isLastPage = currentPage >= pageCount - 1;
 
   return (
-    <div className="min-h-[calc(100vh-57px)] bg-background px-4 py-10 sm:px-6">
+    <div className="min-h-[calc(100vh-57px)] sm:min-h-screen bg-background px-4 py-10 sm:px-6">
       <div className="mx-auto max-w-2xl">
         <div className="mb-2 flex items-center justify-between text-body-sm text-text-muted">
           <span>
-            Question {currentPosition} of {totalCount}
+            Questions {pageStart + 1}–{Math.min(pageStart + PER_PAGE, questions.length)} of {totalCount}
+            <span className="ml-2 text-text-muted/70">· {answeredCount} answered</span>
           </span>
           <div className="flex items-center gap-2">
             {mode === "practice" && <Badge tone="test">Score: {correctCount}</Badge>}
@@ -603,57 +593,104 @@ export default function PracticePage() {
           </div>
         </div>
 
-        <Progress value={progressPercent} tone="test" className="mb-6" />
+        <Progress value={progressPercent} tone="test" className="mb-4" />
 
-        {skippedIds.size > 0 && (
-          <Alert tone="warning" className="mb-4">
-            {skippedIds.size} question{skippedIds.size === 1 ? "" : "s"} skipped — you&apos;ll get{" "}
-            {skippedIds.size === 1 ? "it" : "them"} again before this session ends.
-          </Alert>
-        )}
-
-        <div key={currentQuestion?.id} className="animate-fade-in">
-          <QuestionCard
-            question={currentQuestion}
-            answer={answer}
-            onAnswerChange={handleAnswerChange}
-            onSubmit={handleSubmit}
-            onSkip={handleSkip}
-            canSkip={queue.length > 1}
-            isAnswered={isCurrentAnswered}
-            isSubmitting={isSubmitting}
-            result={result}
-            mode={mode}
-            onNext={handleNext}
-            isLastQuestion={isLastQuestion}
-          />
-
-          {mode === "practice" && result && (
-            <FeedbackPanel
-              isCorrect={result.isCorrect}
-              correctOptionText={result.correctAnswerText}
-              questionId={currentQuestion.id}
-              domain={currentQuestion.domain}
-              onNext={handleNext}
-              isLastQuestion={isLastQuestion}
-            />
-          )}
+        {/* Question navigator: jump to any question; filled = answered. */}
+        <div className="mb-6 flex flex-wrap gap-1.5">
+          {questions.map((q, index) => {
+            const onThisPage = index >= pageStart && index < pageStart + PER_PAGE;
+            const submitted = submittedIds.has(q.id);
+            return (
+              <button
+                key={q.id}
+                type="button"
+                onClick={() => goToQuestion(index)}
+                aria-current={onThisPage ? "true" : undefined}
+                className={cn(
+                  "h-7 w-7 rounded-md border text-caption font-medium tabular-nums transition-colors",
+                  submitted
+                    ? "border-test bg-test text-white"
+                    : "border-border bg-surface text-text-muted hover:border-test/40",
+                  onThisPage && "ring-2 ring-test/40 ring-offset-1"
+                )}
+              >
+                {index + 1}
+              </button>
+            );
+          })}
         </div>
 
+        {pageQuestions.map((question) => {
+          const submitted = submittedIds.has(question.id);
+          const result = resultsById[question.id] ?? null;
+          return (
+            <div key={question.id} className="mb-6 animate-fade-in">
+              <QuestionCard
+                question={question}
+                answer={answersById[question.id] ?? null}
+                onAnswerChange={(next) => handleAnswerChange(question.id, next)}
+                onSubmit={() => handleSubmit(question.id)}
+                canSkip={false}
+                isAnswered={submitted}
+                isSubmitting={submittingId === question.id}
+                result={result}
+                mode={mode}
+                hideAdvance
+              />
+
+              {mode === "practice" && result && (
+                <FeedbackPanel
+                  isCorrect={result.isCorrect}
+                  correctOptionText={result.correctAnswerText}
+                  questionId={question.id}
+                  domain={question.domain}
+                  hideNext
+                />
+              )}
+            </div>
+          );
+        })}
+
         {loadError && (
-          <Alert tone="error" className="mt-4">
+          <Alert tone="error" className="mb-4">
             {loadError}
           </Alert>
         )}
+
+        <div className="mt-2 flex items-center justify-between gap-3">
+          <Button
+            variant="outline"
+            onClick={() => setCurrentPage((p) => Math.max(0, p - 1))}
+            disabled={currentPage === 0}
+          >
+            Previous
+          </Button>
+          <span className="text-body-sm text-text-muted">
+            Page {currentPage + 1} of {pageCount}
+          </span>
+          {isLastPage ? (
+            <Button tone="test" onClick={requestFinish}>
+              {mode === "test" ? "Finish test" : "Finish session"}
+            </Button>
+          ) : (
+            <Button tone="test" onClick={() => setCurrentPage((p) => Math.min(pageCount - 1, p + 1))}>
+              Next
+            </Button>
+          )}
+        </div>
       </div>
 
       <ConfirmModal
         open={showEndConfirm}
-        title="Do you want to end the practice session?"
+        title={
+          allAnswered
+            ? "Finish this session?"
+            : `${totalCount - answeredCount} question${totalCount - answeredCount === 1 ? "" : "s"} still unanswered`
+        }
         message="Your progress so far will be saved, but you won't be able to resume these remaining questions."
         confirmLabel="End session"
         cancelLabel="Keep practicing"
-        onConfirm={handleEndPractice}
+        onConfirm={endSession}
         onCancel={() => setShowEndConfirm(false)}
       />
     </div>

@@ -25,6 +25,9 @@ function isAnswerReady(question, answer) {
 
 function OptionList({ question, answer, onAnswerChange, isAnswered, result }) {
   const isMulti = question.question_type === "multi_select";
+  // Test Mode submits without a result -- the answer is locked but
+  // correctness stays hidden until the end-of-test review.
+  const revealed = isAnswered && Boolean(result);
 
   function toggle(optionId) {
     if (isAnswered) return;
@@ -45,8 +48,8 @@ function OptionList({ question, answer, onAnswerChange, isAnswered, result }) {
       <legend className="sr-only">Answer options</legend>
       {question.options.map((option) => {
         const isSelected = isMulti ? (answer ?? []).includes(option.id) : option.id === answer;
-        const isCorrectOption = isAnswered && correctIds.has(option.id);
-        const isWrongSelection = isAnswered && isSelected && !correctIds.has(option.id);
+        const isCorrectOption = revealed && correctIds.has(option.id);
+        const isWrongSelection = revealed && isSelected && !correctIds.has(option.id);
 
         return (
           <button
@@ -91,15 +94,19 @@ function OptionList({ question, answer, onAnswerChange, isAnswered, result }) {
   );
 }
 
-function FillBlank({ answer, onAnswerChange, isAnswered, result }) {
-  const isWrong = isAnswered && !result?.isCorrect;
+function FillBlank({ questionId, answer, onAnswerChange, isAnswered, result }) {
+  // Test Mode locks the field on submit but withholds correctness until
+  // the end-of-test review, so only colour it once `result` is present.
+  const revealed = isAnswered && Boolean(result);
+  const isWrong = revealed && !result.isCorrect;
+  const inputId = `fill-blank-${questionId ?? "current"}`;
   return (
     <div>
-      <label htmlFor="test-fill-blank" className="sr-only">
+      <label htmlFor={inputId} className="sr-only">
         Your answer
       </label>
       <input
-        id="test-fill-blank"
+        id={inputId}
         type="text"
         disabled={isAnswered}
         value={answer ?? ""}
@@ -107,11 +114,13 @@ function FillBlank({ answer, onAnswerChange, isAnswered, result }) {
         placeholder="Type your answer"
         className={cn(
           "w-full rounded-md border px-4 py-3 text-body-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-test",
-          isAnswered
-            ? result?.isCorrect
+          revealed
+            ? result.isCorrect
               ? "border-success bg-success-muted text-success"
               : "border-error bg-error-muted text-error"
-            : "border-border-strong bg-surface"
+            : isAnswered
+              ? "border-border-strong bg-surface-muted text-text-secondary"
+              : "border-border-strong bg-surface"
         )}
       />
       {isWrong && result?.correctAnswer && (
@@ -125,6 +134,9 @@ function FillBlank({ answer, onAnswerChange, isAnswered, result }) {
 
 function Matching({ question, answer, onAnswerChange, isAnswered, result }) {
   const selections = answer ?? {};
+  // Test Mode locks the selects on submit but withholds correctness until
+  // the end-of-test review, so only mark rows once `result` is present.
+  const revealed = isAnswered && Boolean(result);
 
   function setPair(pairId, value) {
     if (isAnswered) return;
@@ -136,8 +148,8 @@ function Matching({ question, answer, onAnswerChange, isAnswered, result }) {
       {question.matching_pairs.map((pair) => {
         const selected = selections[pair.id] ?? "";
         const correctText = result?.correctPairing?.[pair.id];
-        const isRowCorrect = isAnswered && selected === correctText;
-        const isRowWrong = isAnswered && selected && !isRowCorrect;
+        const isRowCorrect = revealed && selected === correctText;
+        const isRowWrong = revealed && selected && !isRowCorrect;
 
         return (
           <div
@@ -184,6 +196,7 @@ export default function QuestionCard({
   mode,
   onNext,
   isLastQuestion,
+  hideAdvance = false,
 }) {
   if (!question) return null;
 
@@ -207,7 +220,13 @@ export default function QuestionCard({
         <OptionList question={question} answer={answer} onAnswerChange={onAnswerChange} isAnswered={isAnswered} result={result} />
       )}
       {question.question_type === "fill_blank" && (
-        <FillBlank answer={answer} onAnswerChange={onAnswerChange} isAnswered={isAnswered} result={result} />
+        <FillBlank
+          questionId={question.id}
+          answer={answer}
+          onAnswerChange={onAnswerChange}
+          isAnswered={isAnswered}
+          result={result}
+        />
       )}
       {question.question_type === "matching" && (
         <Matching question={question} answer={answer} onAnswerChange={onAnswerChange} isAnswered={isAnswered} result={result} />
@@ -228,12 +247,14 @@ export default function QuestionCard({
 
       {isAnswered && mode === "test" && (
         <div className="mt-5">
-          <p className="mb-3 rounded-md bg-surface-muted px-4 py-2 text-body-sm text-text-secondary">
+          <p className="rounded-md bg-surface-muted px-4 py-2 text-body-sm text-text-secondary">
             Answer recorded — you&apos;ll see the correct answer and explanation after you finish the test.
           </p>
-          <Button variant="secondary" onClick={onNext} className="w-full">
-            {isLastQuestion ? "Finish test" : "Next question"}
-          </Button>
+          {!hideAdvance && (
+            <Button variant="secondary" onClick={onNext} className="mt-3 w-full">
+              {isLastQuestion ? "Finish test" : "Next question"}
+            </Button>
+          )}
         </div>
       )}
     </Card>
