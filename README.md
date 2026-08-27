@@ -94,24 +94,7 @@ Interactive OpenAPI docs are generated automatically with [`drf-spectacular`](ht
 
 | URL | What it is |
 |-----|------------|
-| `http://127.0.0.1:8000/api/docs/`   | **Swagger UI** — browse every endpoint and run requests with *Try it out* |
-| `http://127.0.0.1:8000/api/redoc/`  | ReDoc — clean read-only reference view |
-| `http://127.0.0.1:8000/api/schema/` | Raw OpenAPI 3 schema (YAML), e.g. for Postman/Thunder Client import |
-
-### Authorizing requests in Swagger UI
-
-Most endpoints need a JWT. In the UI:
-
-1. Call `POST /api/auth/login/` with a valid `username` / `password` and copy the `access` token from the response.
-2. Click **Authorize** (top-right), paste the token, and confirm.
-3. All subsequent *Try it out* calls send `Authorization: Bearer <token>` automatically. Admin-only endpoints additionally require a user whose `role` is `admin`.
-
-### Export the schema to a file
-
-```bash
-cd backend
-python manage.py spectacular --file schema.yaml
-```
+| `http://127.0.0.1:8000/api/docs/`   | **Swagger UI** — browse endpoint and run 
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
