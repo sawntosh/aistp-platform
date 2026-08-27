@@ -4,7 +4,10 @@ Domain, Question, AnswerOption, Attempt, PracticeSession
 -- Report Section 4.7 (Database Design) / Figure 8 (ER Diagram)
 """
 from django.conf import settings
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+
+from .constants import CONFIDENCE_MAX, CONFIDENCE_MIN
 
 
 class Domain(models.Model):
@@ -14,6 +17,41 @@ class Domain(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class DomainResource(models.Model):
+    """An admin-curated external reference link for a domain -- shown to
+    learners in Practice Mode's per-question feedback and in Test Mode's
+    end-of-session review. Empty until an admin adds real links; the
+    feature degrades gracefully to "no links yet" rather than guessing."""
+    domain = models.ForeignKey(Domain, on_delete=models.CASCADE, related_name="resources")
+    title = models.CharField(max_length=200)
+    url = models.URLField()
+    order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["order", "id"]
+
+    def __str__(self):
+        return self.title
+
+
+class Topic(models.Model):
+    """A syllabus sub-chapter within a Domain (e.g. "Seven Testing
+    Principles" within "Fundamental of Testing") -- Study Mode's unit of
+    navigation. Distinct from Test Mode, which draws questions from the
+    whole domain regardless of topic."""
+    domain = models.ForeignKey(Domain, on_delete=models.CASCADE, related_name="topics")
+    title = models.CharField(max_length=200)
+    description = models.CharField(max_length=500, blank=True, default="")
+    order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["order", "id"]
+
+    def __str__(self):
+        return f"{self.domain.name} / {self.title}"
 
 
 class Question(models.Model):
@@ -30,6 +68,11 @@ class Question(models.Model):
         MATCHING = "matching", "Matching"
 
     domain = models.ForeignKey(Domain, on_delete=models.CASCADE, related_name="questions")
+    # Study Mode only: which syllabus sub-chapter this question reinforces.
+    # Left null for the majority of the bank, which Test Mode draws from
+    # regardless of topic -- Study Mode only ever pulls questions that are
+    # explicitly tagged to the topic the learner just read about.
+    topic = models.ForeignKey(Topic, on_delete=models.SET_NULL, null=True, blank=True, related_name="questions")
     text = models.TextField()
     difficulty = models.CharField(max_length=10, choices=Difficulty.choices, default=Difficulty.MEDIUM)
     question_type = models.CharField(max_length=20, choices=QuestionType.choices, default=QuestionType.MCQ)
@@ -83,7 +126,19 @@ class MatchingPair(models.Model):
 
 class PracticeSession(models.Model):
     """One quiz session a learner starts (10/20/40 questions)."""
+
+    class Mode(models.TextChoices):
+        # Practice: immediate per-question feedback, AI explanation, and
+        # domain resource links -- FeedbackPanel renders right after each
+        # submit (see AnswerSubmitView).
+        PRACTICE = "practice", "Practice"
+        # Test: exam simulation -- AnswerSubmitView withholds correctness
+        # and the correct answer until the session is finished, when
+        # SessionReviewView reveals everything at once.
+        TEST = "test", "Test"
+
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="sessions")
+    mode = models.CharField(max_length=10, choices=Mode.choices, default=Mode.PRACTICE)
     started_at = models.DateTimeField(auto_now_add=True)
     finished_at = models.DateTimeField(null=True, blank=True)
     question_count = models.PositiveIntegerField()
@@ -111,6 +166,15 @@ class Attempt(models.Model):
     text_answer = models.CharField(max_length=255, blank=True, default="")
     matching_response = models.JSONField(blank=True, default=dict)
     is_correct = models.BooleanField()
+    # Test Mode only: the learner's 1-5 self-rated confidence in this
+    # answer. Null for pre-feature attempts and for Practice Mode, where
+    # confidence is not collected. Purely diagnostic -- never read by
+    # services.scoring_service or the session score (see .constants).
+    confidence = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(CONFIDENCE_MIN), MaxValueValidator(CONFIDENCE_MAX)],
+    )
     answered_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

@@ -1,9 +1,18 @@
 import { useEffect, useRef, useState } from "react";
+import { LogOut } from "lucide-react";
 import UserAvatar from "./UserAvatar";
+import { cn } from "../lib/cn";
 
 // Clicking the avatar opens a small card with the user's name and a log out
 // action -- closes on an outside click, Escape, or after logging out.
-export default function UserMenu({ name, onLogout, disabled = false, disabledTitle }) {
+export default function UserMenu({
+  name,
+  onLogout,
+  disabled = false,
+  disabledTitle,
+  openUp = false,
+  align = "right",
+}) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef(null);
 
@@ -33,7 +42,7 @@ export default function UserMenu({ name, onLogout, disabled = false, disabledTit
   }
 
   return (
-    <div className="relative ml-2" ref={containerRef}>
+    <div className="relative ml-1" ref={containerRef}>
       <button
         type="button"
         onClick={() => setIsOpen((open) => !open)}
@@ -41,7 +50,10 @@ export default function UserMenu({ name, onLogout, disabled = false, disabledTit
         title={disabled ? disabledTitle : name}
         aria-haspopup="menu"
         aria-expanded={isOpen}
-        className="rounded-full transition-opacity active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
+        className={cn(
+          "rounded-full transition-opacity focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
+          disabled && "cursor-not-allowed opacity-50"
+        )}
       >
         <UserAvatar name={name} />
       </button>
@@ -49,19 +61,31 @@ export default function UserMenu({ name, onLogout, disabled = false, disabledTit
       {isOpen && (
         <div
           role="menu"
-          className="absolute right-0 top-full z-50 mt-2 w-56 origin-top-right rounded-xl border border-gray-100 bg-white p-2 shadow-lg animate-fade-in"
+          className={cn(
+            "absolute z-50 w-56 rounded-lg border border-border bg-surface p-2 shadow-lg animate-fade-in",
+            align === "left" ? "left-0" : "right-0",
+            openUp ? "bottom-full mb-2" : "top-full mt-2",
+            openUp
+              ? align === "left"
+                ? "origin-bottom-left"
+                : "origin-bottom-right"
+              : align === "left"
+                ? "origin-top-left"
+                : "origin-top-right"
+          )}
         >
-          <div className="flex items-center gap-3 rounded-lg px-2 py-2">
+          <div className="flex items-center gap-3 rounded-md px-2 py-2">
             <UserAvatar name={name} size="lg" />
-            <span className="truncate text-sm font-semibold text-gray-900">{name}</span>
+            <span className="truncate text-body-sm font-semibold text-text-primary">{name}</span>
           </div>
-          <div className="my-1 border-t border-gray-100" />
+          <div className="my-1 border-t border-border" />
           <button
             type="button"
             role="menuitem"
             onClick={handleLogoutClick}
-            className="flex w-full items-center rounded-lg px-3 py-2 text-left text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900 active:scale-[0.98]"
+            className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-body-sm font-medium text-text-secondary transition-colors hover:bg-surface-muted hover:text-text-primary"
           >
+            <LogOut className="h-4 w-4" aria-hidden="true" />
             Log out
           </button>
         </div>

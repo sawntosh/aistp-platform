@@ -19,12 +19,19 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from accounts.permissions import IsAdminRole
+from services.answer_reveal_service import build_reveal_payload
 from services.analytics_service import record_attempt
 from services.question_generation_service import run_generation
 from services.scoring_service import score_answer
 
+from .constants import (
+    confidence_label,
+    is_high_confidence_mistake,
+    is_low_confidence_correct,
+)
 from .imports import import_questions, validate_rows
 from .models import AnswerOption, Attempt, Domain, GenerationJob, PracticeSession, Question
+from .pagination import QuestionPagination
 from .serializers import (
     AnswerSubmitSerializer,
     DomainSerializer,
@@ -104,6 +111,10 @@ class QuestionListView(APIView):
             return Response({"detail": "count must be an integer."}, status=status.HTTP_400_BAD_REQUEST)
         count = max(1, min(count, MAX_SESSION_SIZE))
 
+        mode = request.query_params.get("mode", PracticeSession.Mode.PRACTICE)
+        if mode not in PracticeSession.Mode.values:
+            return Response({"detail": "mode must be 'practice' or 'test'."}, status=status.HTTP_400_BAD_REQUEST)
+
         questions_qs = Question.objects.filter(is_active=True)
 
         domains_param = request.query_params.get("domains")
@@ -128,14 +139,16 @@ class QuestionListView(APIView):
         )
         random.shuffle(questions)
 
-        session = PracticeSession.objects.create(user=request.user, question_count=len(questions))
+        session = PracticeSession.objects.create(user=request.user, question_count=len(questions), mode=mode)
         data = QuestionPublicSerializer(questions, many=True).data
-        return Response({"session_id": session.id, "questions": data})
+        return Response({"session_id": session.id, "mode": session.mode, "questions": data})
 
 
 class AnswerSubmitView(APIView):
-    """FR-03: score the submitted answer, write an Attempt row, and
-    update PerformanceAnalytics for the relevant domain.
+    """FR-03: score the submitted answer, write an Attempt row, and --
+    for Test Mode sessions only -- update PerformanceAnalytics for the
+    relevant domain. Practice Mode attempts are recorded as Attempt rows
+    but deliberately left out of the analytics aggregates.
 
     The expected payload shape depends on the question's question_type
     -- see AnswerSubmitSerializer -- so this view pulls out the right
@@ -165,6 +178,19 @@ class AnswerSubmitView(APIView):
             is_active=True,
         )
         qtype = question.question_type
+
+        # Test Mode requires a 1-5 confidence rating with every answer;
+        # Practice Mode does not collect it. The serializer has already
+        # range-checked any value that was sent (see AnswerSubmitSerializer).
+        confidence = data.get("confidence")
+        if session.mode == PracticeSession.Mode.TEST:
+            if confidence is None:
+                return Response(
+                    {"detail": "confidence (1-5) is required for Test Mode answers."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        else:
+            confidence = None
 
         submission = {}
         attempt_fields = {}
@@ -211,29 +237,25 @@ class AnswerSubmitView(APIView):
             user=request.user,
             question=question,
             is_correct=is_correct,
+            confidence=confidence,
             **attempt_fields,
         )
         if selected_options is not None:
             attempt.selected_options.set(selected_options)
 
-        record_attempt(request.user, question.domain, is_correct)
+        if session.mode == PracticeSession.Mode.TEST:
+            # Only Test Mode moves the learner's tracked performance
+            # analytics (FR-05/FR-07). Practice Mode is low-stakes
+            # rehearsal and is deliberately kept out of the per-domain
+            # accuracy aggregates.
+            record_attempt(request.user, question.domain, is_correct)
 
-        response_payload = {"is_correct": is_correct, "question_type": qtype}
-        if qtype in (Question.QuestionType.MCQ, Question.QuestionType.TRUE_FALSE):
-            correct_option = question.options.filter(is_correct=True).first()
-            response_payload["correct_option_id"] = correct_option.id if correct_option else None
-            response_payload["correct_option_text"] = correct_option.text if correct_option else None
-        elif qtype == Question.QuestionType.MULTI_SELECT:
-            correct_options = question.options.filter(is_correct=True)
-            response_payload["correct_option_ids"] = [opt.id for opt in correct_options]
-            response_payload["correct_option_texts"] = [opt.text for opt in correct_options]
-        elif qtype == Question.QuestionType.FILL_BLANK:
-            first_answer = question.blank_answers.first()
-            response_payload["correct_answer"] = first_answer.answer_text if first_answer else None
-        elif qtype == Question.QuestionType.MATCHING:
-            response_payload["correct_pairing"] = {
-                str(pair.id): pair.match_text for pair in question.matching_pairs.all()
-            }
+            # Exam simulation: don't leak correctness or the answer key via
+            # the network response -- SessionReviewView reveals everything
+            # once the whole session is finished.
+            response_payload = {"question_type": qtype, "recorded": True}
+        else:
+            response_payload = {"is_correct": is_correct, "question_type": qtype, **build_reveal_payload(question)}
 
         return Response(response_payload)
 
@@ -269,13 +291,111 @@ class SessionFinishView(APIView):
         )
 
 
+class SessionReviewView(APIView):
+    """Test Mode's end-of-session reveal: every answer the learner
+    submitted during a finished session, alongside the correct answer,
+    domain description, and resource links -- withheld during the
+    session itself (see AnswerSubmitView) so Test Mode plays out like a
+    real exam. Only available once the session has been finished, and
+    only to the learner who owns it."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, session_id):
+        session = get_object_or_404(
+            PracticeSession, id=session_id, user=request.user, finished_at__isnull=False
+        )
+        attempts = (
+            session.attempts.select_related("question__domain", "selected_option")
+            .prefetch_related(
+                "question__options",
+                "question__blank_answers",
+                "question__matching_pairs",
+                "selected_options",
+            )
+            .order_by("answered_at")
+        )
+
+        results = []
+        for attempt in attempts:
+            question = attempt.question
+            qtype = question.question_type
+
+            your_answer = {}
+            if qtype in (Question.QuestionType.MCQ, Question.QuestionType.TRUE_FALSE):
+                your_answer["selected_option_id"] = attempt.selected_option_id
+                your_answer["selected_option_text"] = (
+                    attempt.selected_option.text if attempt.selected_option else None
+                )
+            elif qtype == Question.QuestionType.MULTI_SELECT:
+                selected = list(attempt.selected_options.all())
+                your_answer["selected_option_ids"] = [opt.id for opt in selected]
+                your_answer["selected_option_texts"] = [opt.text for opt in selected]
+            elif qtype == Question.QuestionType.FILL_BLANK:
+                your_answer["text_answer"] = attempt.text_answer
+            elif qtype == Question.QuestionType.MATCHING:
+                your_answer["matching_response"] = attempt.matching_response
+
+            results.append(
+                {
+                    "question_id": question.id,
+                    "domain": DomainSerializer(question.domain).data,
+                    "text": question.text,
+                    "question_type": qtype,
+                    "difficulty": question.difficulty,
+                    "options": [{"id": opt.id, "text": opt.text} for opt in question.options.all()],
+                    "matching_pairs": [
+                        {"id": pair.id, "prompt_text": pair.prompt_text}
+                        for pair in question.matching_pairs.all()
+                    ],
+                    "is_correct": attempt.is_correct,
+                    "your_answer": your_answer,
+                    # Confidence diagnostics -- see questions.constants.
+                    "confidence": attempt.confidence,
+                    "confidence_label": confidence_label(attempt.confidence),
+                    "high_confidence_mistake": is_high_confidence_mistake(
+                        attempt.confidence, attempt.is_correct
+                    ),
+                    "low_confidence_correct": is_low_confidence_correct(
+                        attempt.confidence, attempt.is_correct
+                    ),
+                    **build_reveal_payload(question),
+                }
+            )
+
+        return Response(
+            {
+                "session_id": session.id,
+                "question_count": session.question_count,
+                "score": session.score,
+                "mode": session.mode,
+                "results": results,
+            }
+        )
+
+
 class AdminQuestionViewSet(viewsets.ModelViewSet):
-    """FR-06: admin-only CRUD on questions/answer options."""
+    """FR-06: admin-only CRUD on questions/answer options.
+
+    The list action is paginated (QuestionPagination) and accepts an
+    optional ?domain=<id> filter so the admin table can page and filter
+    across the whole bank instead of pulling every row at once.
+    """
     permission_classes = [permissions.IsAuthenticated, IsAdminRole]
-    queryset = Question.objects.all().select_related("domain").prefetch_related(
-        "options", "blank_answers", "matching_pairs"
+    pagination_class = QuestionPagination
+    queryset = (
+        Question.objects.all()
+        .select_related("domain")
+        .prefetch_related("options", "blank_answers", "matching_pairs")
+        .order_by("-id")
     )
     serializer_class = QuestionAdminSerializer
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        domain_id = self.request.query_params.get("domain")
+        if domain_id:
+            queryset = queryset.filter(domain_id=domain_id)
+        return queryset
 
     @action(detail=False, methods=["post"], url_path="import", parser_classes=[MultiPartParser, JSONParser])
     def import_from_json(self, request):

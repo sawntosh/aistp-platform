@@ -75,7 +75,28 @@ class QuestionDeliveryTests(APITestCase):
     def test_answer_submit_updates_analytics(self):
         from analytics.models import PerformanceAnalytics
 
-        session = PracticeSession.objects.create(user=self.user, question_count=1)
+        session = PracticeSession.objects.create(
+            user=self.user, question_count=1, mode=PracticeSession.Mode.TEST
+        )
+        self.client.post(
+            "/api/questions/submit/",
+            {
+                "session_id": session.id,
+                "question_id": self.question.id,
+                "selected_option_id": self.correct.id,
+                "confidence": 4,  # required for Test Mode submissions
+            },
+        )
+        record = PerformanceAnalytics.objects.get(user=self.user, domain=self.domain)
+        self.assertEqual(record.total_count, 1)
+        self.assertEqual(record.correct_count, 1)
+
+    def test_practice_mode_submit_does_not_update_analytics(self):
+        from analytics.models import PerformanceAnalytics
+
+        session = PracticeSession.objects.create(
+            user=self.user, question_count=1, mode=PracticeSession.Mode.PRACTICE
+        )
         self.client.post(
             "/api/questions/submit/",
             {
@@ -84,9 +105,9 @@ class QuestionDeliveryTests(APITestCase):
                 "selected_option_id": self.correct.id,
             },
         )
-        record = PerformanceAnalytics.objects.get(user=self.user, domain=self.domain)
-        self.assertEqual(record.total_count, 1)
-        self.assertEqual(record.correct_count, 1)
+        self.assertFalse(
+            PerformanceAnalytics.objects.filter(user=self.user, domain=self.domain).exists()
+        )
 
     def test_answer_submit_rejects_other_users_session(self):
         other = User.objects.create_user(

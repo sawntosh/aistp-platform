@@ -6,7 +6,9 @@
 
 **AI-Assisted Software Testing Practice Platform**
 
-An ISTQB CTFL v4.0 exam-prep platform with Groq-powered explanations, RAG-based question generation, and domain-level performance analytics.
+An ISTQB CTFL v4.0 exam-prep platform with two learning modes (Study & Test),
+Groq-powered explanations, RAG-based question generation, self-rated confidence
+tracking, and domain-level performance analytics.
 
 [![Django](https://img.shields.io/badge/Django-6.0-092E20?style=for-the-badge&logo=django&logoColor=white)](https://www.djangoproject.com/)
 [![Next.js](https://img.shields.io/badge/Next.js-14-000000?style=for-the-badge&logo=next.js&logoColor=white)](https://nextjs.org/)
@@ -22,25 +24,28 @@ An ISTQB CTFL v4.0 exam-prep platform with Groq-powered explanations, RAG-based 
 
 ## ✨ Features
 
-- 🔐 **Secure auth** — JWT-based login/registration with bcrypt password hashing
-- 📚 **Domain-organized question bank** covering the ISTQB CTFL v4.0 syllabus
-- ✅ **Instant scoring** on every practice attempt
-- 🤖 **AI explanations** for wrong answers, generated on-demand via Groq
-- 📊 **Analytics dashboard** — accuracy broken down per syllabus domain
-- 🛠️ **Admin CRUD** for managing questions and domains
+- 🔐 **Secure auth** — JWT login/registration, bcrypt hashing, role-gated (student / admin) sign-in
+- 📚 **Study Mode** — unscored, no pass/fail: pick a domain → read a topic → reinforce with related questions. Isolated from all Test Mode metrics
+- 📝 **Test Mode** — exam simulation: answers, explanations, and resource links are withheld until you finish, then revealed in a full session review
+- 🎯 **Confidence tracking** *(Test Mode)* — rate how sure you are (1–5) on every answer. Never affects marks; surfaces **high-confidence mistakes** (sure but wrong) and low-confidence-correct insights
+- 🧩 **Five question types** — multiple choice, true/false, multiple-answer, fill-in-the-blank, and matching, all rule-based scored
+- 🤖 **AI explanations** — on-demand, structured into sections (correct answer, why, concept, per-option breakdown, key concept, exam tip) via Groq
+- 🏗️ **RAG question generation** — admins upload a PDF/DOCX syllabus and generate questions per domain in the background
+- 📊 **Analytics dashboard** — per-domain accuracy, weakest domains, session history & streak, plus Test Mode confidence insights (average confidence, accuracy by confidence level, high-confidence mistakes)
+- 🛠️ **Admin CRUD** — manage questions and domains, with a paginated, domain-filtered question list and bulk JSON import
+- 🧭 **Redesigned UI** — shared design system, left sidebar navigation for signed-in users, session customization (mode, domain filter, length), paged practice sessions with a question navigator
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ## 🧱 Tech Stack
 
-| Layer      | Technology                                              |
-|------------|----------------------------------------------------------|
-| Frontend   | React, Next.js, Tailwind CSS                             |
-| Backend    | Django, Django REST Framework                             |
-| Auth       | djangorestframework-simplejwt, bcrypt                      |
-| API docs   | drf-spectacular (Swagger UI + ReDoc)                       |
-| Database   | PostgreSQL (Supabase free tier)                            |
-| AI         | Groq API (`llama-3.3-70b-versatile`)                       |
+| Layer      | Technology                                                    |
+|------------|--------------------------------------------------------------- |
+| Frontend   | React 18, Next.js 14 (Pages Router), Tailwind CSS             |
+| Backend    | Django 6.0, Django REST Framework                             |
+| Auth       | djangorestframework-simplejwt, bcrypt                         |
+| Database   | PostgreSQL (Supabase free tier); SQLite fallback for local dev |
+| AI         | Groq API (`llama-3.3-70b-versatile`)                          |
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -56,25 +61,28 @@ An ISTQB CTFL v4.0 exam-prep platform with Groq-powered explanations, RAG-based 
 ```bash
 cd backend
 python -m venv venv
-venv\Scripts\activate        # Windows
+venv\Scripts\activate        # Windows  (source venv/bin/activate on macOS/Linux)
 pip install -r requirements.txt
 ```
 
 Create `backend/.env`:
 ```env
 SECRET_KEY=your-django-secret-key
-DATABASE_URL=your-postgres-connection-string
+DATABASE_URL=your-postgres-connection-string   # omit to use local sqlite
 GROQ_API_KEY=your-groq-api-key
 ```
 
 Run it:
 ```bash
 python manage.py migrate
-python manage.py seed_questions   # loads the bundled question bank (skips if already seeded)
+python manage.py seed_questions        # bundled ISTQB CTFL v4.0 question bank
+python manage.py seed_study_content    # Study Mode topics + reading content
 python manage.py runserver
 ```
 
-> `seed_questions` loads `backend/questions/fixtures/seed_questions.json` (the full ISTQB CTFL v4.0 question bank, versioned in git) into whatever database `DATABASE_URL` points to. Run it once per fresh database — every clone/teammate ends up with the same questions instead of relying on someone's local `db.sqlite3`, which is gitignored and never shared. Pass `--force` to re-import on top of existing data.
+> **`seed_questions`** loads `backend/questions/fixtures/seed_questions.json` (the full question bank, versioned in git) into whatever database `DATABASE_URL` points to. Run it once per fresh database so every clone/teammate ends up with the same questions instead of relying on a local `db.sqlite3` (gitignored, never shared). Pass `--force` to re-import on top of existing data.
+>
+> **`seed_study_content`** populates the `study` app's topics and reading material. Run it once per fresh database; Study Mode shows "no topics yet" until it does.
 
 ### Frontend
 
@@ -84,7 +92,31 @@ npm install
 npm run dev
 ```
 
-App runs at `http://localhost:3000` · API at `http://127.0.0.1:8000/api/` · Admin at `http://127.0.0.1:8000/admin/`
+Create `frontend/.env.local`:
+```env
+NEXT_PUBLIC_API_BASE_URL=http://localhost:8000/api
+```
+
+App runs at `http://localhost:3000` · API at `http://127.0.0.1:8000/api/` · Django admin at `http://127.0.0.1:8000/admin/`
+
+### Tests
+
+```bash
+cd backend
+python manage.py test questions analytics study --noinput
+```
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+## 🌐 API Overview
+
+| Prefix                | Purpose                                                        |
+|-----------------------|---------------------------------------------------------------- |
+| `/api/auth/`          | Register, login, token refresh, current user                   |
+| `/api/questions/`     | Session delivery, answer submission, finish/review, admin CRUD + import, RAG generation |
+| `/api/explain/`       | On-demand AI explanation for a question                        |
+| `/api/analytics/`     | Dashboard: accuracy, weakest domains, session history, confidence insights |
+| `/api/study/`         | Study Mode: domains, topics, start topic, answer, complete     |
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -104,35 +136,45 @@ Interactive OpenAPI docs are generated automatically with [`drf-spectacular`](ht
 aistp-platform/
 ├── backend/
 │   ├── aistp/           # settings, urls, wsgi/asgi
-│   ├── accounts/        # user model, register/login
-│   ├── questions/       # domains, questions, attempts, sessions
-│   ├── explanations/    # Groq-powered AI explanations
-│   ├── analytics/       # performance dashboard
-│   └── services/        # explanation_service, question_generation_service, scoring_service, analytics_service
+│   ├── accounts/        # user model, register/login, JWT
+│   ├── questions/       # domains, topics, questions (5 types), attempts,
+│   │                    #   practice sessions, confidence, admin CRUD, RAG jobs
+│   ├── study/           # Study Mode: study sessions, progress, reading content
+│   ├── explanations/    # Groq-powered structured AI explanations
+│   ├── analytics/       # performance + confidence dashboard aggregates
+│   └── services/        # scoring, answer_reveal, explanation, question_generation,
+│                        #   analytics_service (accuracy + confidence diagnostics)
 └── frontend/
     └── src/
-        ├── components/
-        ├── pages/
-        ├── hooks/
-        ├── services/     # API client wrappers
+        ├── components/  # QuestionCard, ConfidenceSelector, Sidebar, Study*, …
+        │   └── ui/      # design-system primitives (Button, Card, Progress, …)
+        ├── pages/       # index, login, register, dashboard, practice, study/*, admin
+        ├── context/     # AuthContext, PracticeSessionContext
+        ├── services/    # API client wrappers
+        ├── lib/         # cn, fonts, confidence helpers
         └── styles/
 ```
 
 ## 🌿 Branching Strategy
 
-| Branch       | Purpose                                      |
-|--------------|-----------------------------------------------|
-| `main`       | Production, protected, 2 approvals required    |
-| `dev`        | Integration branch, 1 approval required        |
-| `feature/*`  | Individual working branches                     |
+| Branch       | Purpose                                       |
+|--------------|--------------------------------------------- |
+| `main`       | Production, protected, 2 approvals required   |
+| `dev`        | Integration branch, 1 approval required       |
+| `feature/*`  | Individual working branches                   |
 
 ## 🗺️ Roadmap
 
-- [x] JWT authentication
-- [x] Question delivery & scoring
-- [x] Admin CRUD
+- [x] JWT authentication (role-gated)
+- [x] Question delivery & rule-based scoring (5 question types)
+- [x] Study Mode & Test Mode (isolated flows)
+- [x] Structured AI explanations
+- [x] RAG question generation from syllabus documents
+- [x] Analytics dashboard (per-domain accuracy, streak, session history)
+- [x] Test Mode confidence tracking & high-confidence-mistake diagnostics
+- [x] Admin CRUD with paginated question list
 - [ ] AI explanation caching
-- [ ] Analytics dashboard polish
+- [ ] Frontend test suite
 - [ ] CI/CD deployment pipeline
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>

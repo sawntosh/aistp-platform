@@ -1,11 +1,16 @@
+import { AlertTriangle } from "lucide-react";
+import EmptyState from "./ui/EmptyState";
+import Progress from "./ui/Progress";
+
 const WEAK_THRESHOLD = 60;
 
 export default function DomainAccuracyBars({ domains }) {
   if (!domains?.length) {
     return (
-      <div className="py-8 text-center text-sm text-gray-400">
-        No domain data yet — complete a practice session to see this breakdown.
-      </div>
+      <EmptyState
+        title="No domain data yet"
+        description="Complete a practice session to see this breakdown."
+      />
     );
   }
 
@@ -19,24 +24,34 @@ export default function DomainAccuracyBars({ domains }) {
           <div key={d.domain}>
             <div className="mb-1.5 flex items-baseline justify-between gap-4">
               <div>
-                <p className="text-sm font-medium text-gray-900">{d.domain}</p>
+                <p className="text-body-sm font-medium text-text-primary">{d.domain}</p>
                 {isWeak && (
-                  <p className="text-[11px] font-semibold tracking-wide text-red-600">NEEDS PRACTICE</p>
+                  <p className="mt-0.5 flex items-center gap-1 text-caption font-semibold tracking-wide text-error">
+                    <AlertTriangle className="h-3 w-3" aria-hidden="true" />
+                    NEEDS PRACTICE
+                  </p>
                 )}
               </div>
               <div className="shrink-0 text-right">
-                <p className="text-sm font-semibold tabular-nums text-gray-900">{d.accuracy_percent}%</p>
-                <p className="text-xs tabular-nums text-gray-400">
+                <p className="text-body-sm font-semibold tabular-nums text-text-primary">{d.accuracy_percent}%</p>
+                <p className="text-caption tabular-nums text-text-muted">
                   {d.correct_count} / {d.total_count}
                 </p>
               </div>
             </div>
-            <div className="h-2.5 w-full overflow-hidden rounded-full bg-gray-100">
-              <div
-                className={`h-full rounded-full ${isWeak ? "bg-red-500" : "bg-indigo-600"}`}
-                style={{ width: `${Math.min(100, d.accuracy_percent)}%` }}
-              />
-            </div>
+            <Progress value={Math.min(100, d.accuracy_percent)} tone={isWeak ? "error" : "default"} />
+            {(d.average_confidence != null || d.high_confidence_mistakes > 0) && (
+              <p className="mt-1 text-caption text-text-muted">
+                {d.average_confidence != null && <>Avg confidence {d.average_confidence} / 5</>}
+                {d.average_confidence != null && d.high_confidence_mistakes > 0 && " · "}
+                {d.high_confidence_mistakes > 0 && (
+                  <span className="text-warning">
+                    {d.high_confidence_mistakes} high-confidence mistake
+                    {d.high_confidence_mistakes === 1 ? "" : "s"}
+                  </span>
+                )}
+              </p>
+            )}
           </div>
         );
       })}
