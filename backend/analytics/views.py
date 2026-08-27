@@ -1,6 +1,8 @@
 """
 analytics/views.py -- FR-05: Domain Analytics Dashboard
 """
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema
 from rest_framework import permissions
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -14,6 +16,11 @@ class DashboardView(APIView):
     weakest domains ranked, and session history for the logged-in user."""
     permission_classes = [permissions.IsAuthenticated]
 
+    @extend_schema(
+        responses=OpenApiTypes.OBJECT,
+        summary="Domain analytics dashboard",
+        description="Overall accuracy, per-domain accuracy, and session history for the current user.",
+    )
     def get(self, request):
         domains = get_domain_accuracy(request.user)
 

@@ -1,0 +1,15 @@
+{
+  "client": "Thunder Client",
+  "environmentName": "AISTP Local",
+  "dateExported": "2026-08-27T00:00:00.000Z",
+  "version": "1.2",
+  "data": [
+    { "name": "baseUrl", "value": "http://127.0.0.1:8000" },
+    { "name": "accessToken", "value": "" },
+    { "name": "refreshToken", "value": "" },
+    { "name": "sessionId", "value": "" },
+    { "name": "questionId", "value": "" },
+    { "name": "adminQuestionId", "value": "" },
+    { "name": "generationJobId", "value": "" }
+  ]
+}
