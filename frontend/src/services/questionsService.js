@@ -1,7 +1,7 @@
 import { apiFetch } from "./apiClient";
 
-export async function fetchPracticeQuestions(count = 10, domains = []) {
-  const params = new URLSearchParams({ count: String(count) });
+export async function fetchPracticeQuestions(count = 10, domains = [], mode = "practice") {
+  const params = new URLSearchParams({ count: String(count), mode });
   if (domains.length) params.set("domains", domains.join(","));
   return apiFetch(`/questions/?${params.toString()}`);
 }
@@ -26,6 +26,12 @@ export async function finishSession(sessionId) {
   return apiFetch(`/questions/sessions/${sessionId}/finish/`, { method: "POST" });
 }
 
+// Test Mode only: the full per-question reveal (correct answers +
+// what the learner submitted) for a session that has already finished.
+export async function fetchSessionReview(sessionId) {
+  return apiFetch(`/questions/sessions/${sessionId}/review/`);
+}
+
 // -- Admin: domains --------------------------------------------------------
 
 export async function fetchDomains() {
@@ -34,8 +40,12 @@ export async function fetchDomains() {
 
 // -- Admin: question CRUD ---------------------------------------------------
 
-export async function fetchAdminQuestions() {
-  return apiFetch("/questions/admin/questions/");
+// Paginated. Returns { count, next, previous, results }.
+// `domain` (a domain id) filters server-side across the whole bank.
+export async function fetchAdminQuestions({ page = 1, pageSize = 25, domain = null } = {}) {
+  const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
+  if (domain && domain !== "all") params.set("domain", String(domain));
+  return apiFetch(`/questions/admin/questions/?${params.toString()}`);
 }
 
 export async function createQuestion(payload) {

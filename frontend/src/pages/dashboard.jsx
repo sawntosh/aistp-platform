@@ -1,12 +1,18 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
-import Link from "next/link";
 import { useAuth } from "../context/AuthContext";
 import { fetchDashboardAnalytics } from "../services/analyticsService";
 import { useCountUp } from "../hooks/useCountUp";
 import AccuracyRing from "../components/AccuracyRing";
 import DomainAccuracyBars from "../components/DomainAccuracyBars";
 import AttemptHistoryTable from "../components/AttemptHistoryTable";
+import StudyModeCard from "../components/StudyModeCard";
+import { Card, CardContent } from "../components/ui/Card";
+import { SectionHeader } from "../components/ui/PageHeader";
+import Skeleton from "../components/ui/Skeleton";
+import ErrorState from "../components/ui/ErrorState";
+import SegmentedControl from "../components/ui/SegmentedControl";
+import { cn } from "../lib/cn";
 
 const RANGE_OPTIONS = [
   { label: "Last 5", value: 5 },
@@ -41,6 +47,13 @@ function computeStreak(sessions) {
   return streak;
 }
 
+function greeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
+}
+
 export default function DashboardPage() {
   const router = useRouter();
   const { user, isLoading: isAuthLoading } = useAuth();
@@ -56,17 +69,19 @@ export default function DashboardPage() {
     }
   }, [isAuthLoading, user, router]);
 
+  function loadAnalytics() {
+    setIsLoading(true);
+    setLoadError("");
+    fetchDashboardAnalytics()
+      .then(setData)
+      .catch(() => setLoadError("Couldn't load your analytics right now. Please try again."))
+      .finally(() => setIsLoading(false));
+  }
+
   useEffect(() => {
     if (!user) return;
-    (async () => {
-      try {
-        setData(await fetchDashboardAnalytics());
-      } catch {
-        setLoadError("Couldn't load your analytics right now. Please try again.");
-      } finally {
-        setIsLoading(false);
-      }
-    })();
+    loadAnalytics();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   const domains = data?.domains ?? [];
@@ -98,131 +113,120 @@ export default function DashboardPage() {
 
   if (isAuthLoading || !user) return null;
 
-  if (isLoading) {
-    return (
-      <div className="min-h-[calc(100vh-49px)] flex items-center justify-center text-gray-500">
-        Loading your analytics…
-      </div>
-    );
-  }
-
-  if (loadError) {
-    return (
-      <div className="min-h-[calc(100vh-49px)] flex items-center justify-center text-red-600">
-        {loadError}
-      </div>
-    );
-  }
-
   return (
-    <div className="relative min-h-[calc(100vh-49px)] bg-gray-50 px-4 py-10">
-      <Link
-        href="/practice"
-        className="absolute top-6 left-4 flex items-center justify-center w-10 h-10 rounded-full bg-white/70 shadow-sm transition hover:bg-white"
-        aria-label="Go to practice"
-      >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="20"
-          height="20"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <polygon points="6 3 20 12 6 21 6 3" />
-        </svg>
-      </Link>
-
+    <div className="min-h-[calc(100vh-57px)] sm:min-h-screen bg-background px-4 py-10 sm:px-6">
       <div className="mx-auto max-w-5xl">
-        <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">
-              CTFL Practice &middot; Performance
-            </p>
-            <h1 className="mt-1 font-serif text-3xl text-gray-900">Your Performance Report</h1>
-            <p className="mt-1 text-sm text-gray-500">
-              Updated moments ago &middot; based on {completedSessions.length} completed session
-              {completedSessions.length === 1 ? "" : "s"}
-            </p>
-          </div>
-
-          <div className="inline-flex rounded-md bg-gray-100 p-0.5">
-            {RANGE_OPTIONS.map((option) => (
-              <button
-                key={option.label}
-                type="button"
-                onClick={() => setSessionLimit(option.value)}
-                className={`rounded px-3 py-1.5 text-sm font-medium transition-colors ${
-                  sessionLimit === option.value
-                    ? "bg-white text-indigo-700 shadow-sm"
-                    : "text-gray-500 hover:text-gray-900"
-                }`}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
+        <div className="mb-8">
+          <h1 className="text-h1 text-text-primary">
+            {greeting()}, {user.username}
+          </h1>
+          <p className="mt-1 text-body text-text-muted">Ready to continue your CTFL preparation?</p>
         </div>
 
-        <div className="mb-6 rounded-2xl border border-gray-100 bg-white p-8 shadow-sm">
-          <div className="grid grid-cols-1 gap-8 sm:grid-cols-2">
-            <div className="flex items-center gap-6">
-              <AccuracyRing percent={animatedAccuracy} />
+        <div className="mb-10 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <StudyModeCard
+            variant="study"
+            title="Study Mode"
+            description="Learn concepts and reinforce them with related questions."
+            bullets={["No scores. No pressure."]}
+            ctaLabel="Start Studying"
+            href="/study"
+          />
+          <StudyModeCard
+            variant="test"
+            title="Test Mode"
+            description="Test your knowledge with realistic practice questions."
+            bullets={["Scoring & analytics included."]}
+            ctaLabel="Start Test"
+            href="/practice"
+          />
+        </div>
+
+        {isLoading ? (
+          <div className="space-y-6">
+            <Skeleton className="h-44 w-full" />
+            <Skeleton className="h-56 w-full" />
+            <Skeleton className="h-64 w-full" />
+          </div>
+        ) : loadError ? (
+          <ErrorState description={loadError} onRetry={loadAnalytics} />
+        ) : (
+          <>
+            <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
               <div>
-                <p className="text-sm text-gray-500">Overall accuracy, all domains</p>
-                {delta !== null && (
-                  <p
-                    className={`mt-2 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${
-                      delta >= 0 ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"
-                    }`}
-                  >
-                    {delta >= 0 ? "↑" : "↓"} {Math.abs(delta)} pts vs. previous {sessionLimit} sessions
-                  </p>
-                )}
+                <p className="text-label uppercase tracking-wide text-primary">Your preparation</p>
+                <h2 className="mt-1 text-h2 text-text-primary">Performance report</h2>
+                <p className="mt-1 text-body-sm text-text-muted">
+                  Based on {completedSessions.length} completed session
+                  {completedSessions.length === 1 ? "" : "s"}
+                </p>
               </div>
+
+              <SegmentedControl options={RANGE_OPTIONS} value={sessionLimit} onChange={setSessionLimit} />
             </div>
 
-            <div className="divide-y divide-gray-100 sm:border-l sm:border-gray-100 sm:pl-8">
-              <div className="flex items-center justify-between py-2.5">
-                <span className="text-sm text-gray-500">Sessions completed</span>
-                <span className="text-lg font-semibold tabular-nums text-gray-900">
-                  {Math.round(animatedSessions)}
-                </span>
-              </div>
-              <div className="flex items-center justify-between py-2.5">
-                <span className="text-sm text-gray-500">Questions answered</span>
-                <span className="text-lg font-semibold tabular-nums text-gray-900">
-                  {Math.round(animatedQuestions)}
-                </span>
-              </div>
-              <div className="flex items-center justify-between py-2.5">
-                <span className="text-sm text-gray-500">Current streak</span>
-                <span className="text-lg font-semibold tabular-nums text-gray-900">
-                  {streak} <span className="text-sm font-normal text-gray-400">days</span>
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
+            <Card className="mb-6">
+              <CardContent className="grid grid-cols-1 gap-8 sm:grid-cols-2">
+                <div className="flex items-center gap-6">
+                  <AccuracyRing percent={animatedAccuracy} />
+                  <div>
+                    <p className="text-body-sm text-text-muted">Overall accuracy, all domains</p>
+                    {delta !== null && (
+                      <p
+                        className={cn(
+                          "mt-2 inline-flex items-center rounded-full px-2.5 py-1 text-caption font-medium",
+                          delta >= 0 ? "bg-success-muted text-success" : "bg-error-muted text-error"
+                        )}
+                      >
+                        {delta >= 0 ? "↑" : "↓"} {Math.abs(delta)} pts vs. previous {sessionLimit} sessions
+                      </p>
+                    )}
+                  </div>
+                </div>
 
-        <div className="mb-6 rounded-xl bg-white p-6 shadow-sm">
-          <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
-            <h2 className="font-serif text-xl text-gray-900">Accuracy by domain</h2>
-            <p className="text-xs text-gray-400">Ranked weakest first &middot; 60% is the practice threshold</p>
-          </div>
-          <DomainAccuracyBars domains={domains} />
-        </div>
+                <div className="divide-y divide-border sm:border-l sm:border-border sm:pl-8">
+                  <div className="flex items-center justify-between py-2.5">
+                    <span className="text-body-sm text-text-muted">Sessions completed</span>
+                    <span className="text-lg font-semibold tabular-nums text-text-primary">
+                      {Math.round(animatedSessions)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between py-2.5">
+                    <span className="text-body-sm text-text-muted">Questions answered</span>
+                    <span className="text-lg font-semibold tabular-nums text-text-primary">
+                      {Math.round(animatedQuestions)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between py-2.5">
+                    <span className="text-body-sm text-text-muted">Current streak</span>
+                    <span className="text-lg font-semibold tabular-nums text-text-primary">
+                      {streak} <span className="text-body-sm font-normal text-text-muted">days</span>
+                    </span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
 
-        <div className="rounded-xl bg-white shadow-sm overflow-hidden">
-          <div className="flex items-center justify-between px-6 pt-6 pb-4">
-            <h2 className="font-serif text-xl text-gray-900">Session history</h2>
-            <p className="text-xs text-gray-400">Click a column to sort</p>
-          </div>
-          <AttemptHistoryTable sessions={filteredSessions} />
-        </div>
+            <Card className="mb-6">
+              <CardContent>
+                <SectionHeader
+                  title="Accuracy by domain"
+                  description="Ranked weakest first · 60% is the practice threshold"
+                  className="mb-4"
+                />
+                <DomainAccuracyBars domains={domains} />
+              </CardContent>
+            </Card>
+
+            <Card className="overflow-hidden">
+              <div className="flex items-center justify-between px-6 pt-6 pb-4">
+                <h2 className="text-h3 text-text-primary">Session history</h2>
+                <p className="text-caption text-text-muted">Click a column to sort</p>
+              </div>
+              <AttemptHistoryTable sessions={filteredSessions} />
+            </Card>
+          </>
+        )}
       </div>
     </div>
   );

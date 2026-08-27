@@ -1,4 +1,5 @@
 import { getInitials } from "../utils/initials";
+import { cn } from "../lib/cn";
 
 // Same hash-based approach as utils/domainColors.js -- a given name always
 // lands on the same color, no state or backend field required.
@@ -24,7 +25,12 @@ export default function UserAvatar({ name, size = "sm", className = "" }) {
   return (
     <span
       title={name}
-      className={`flex shrink-0 items-center justify-center rounded-full font-semibold text-white ${colorFor(name)} ${sizeClasses} ${className}`}
+      className={cn(
+        "flex shrink-0 items-center justify-center rounded-full font-semibold text-white",
+        colorFor(name),
+        sizeClasses,
+        className
+      )}
     >
       {getInitials(name)}
     </span>

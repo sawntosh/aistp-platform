@@ -1,6 +1,3 @@
-const TRACK_COLOR = "#e5e7eb"; // gray-200
-const FILL_COLOR = "#4f46e5"; // indigo-600
-
 export default function AccuracyRing({ percent, size = 160, strokeWidth = 12 }) {
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
@@ -10,13 +7,20 @@ export default function AccuracyRing({ percent, size = 160, strokeWidth = 12 }) 
   return (
     <div className="relative shrink-0" style={{ width: size, height: size }}>
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
-        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={TRACK_COLOR} strokeWidth={strokeWidth} />
         <circle
           cx={size / 2}
           cy={size / 2}
           r={radius}
           fill="none"
-          stroke={FILL_COLOR}
+          stroke="rgb(var(--color-border))"
+          strokeWidth={strokeWidth}
+        />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke="rgb(var(--color-primary))"
           strokeWidth={strokeWidth}
           strokeLinecap="round"
           strokeDasharray={circumference}
@@ -25,11 +29,11 @@ export default function AccuracyRing({ percent, size = 160, strokeWidth = 12 }) 
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-3xl font-semibold tabular-nums text-gray-900">
+        <span className="text-h1 font-semibold tabular-nums text-text-primary">
           {Math.round(clamped)}
           <span className="text-lg align-top">%</span>
         </span>
-        <span className="text-xs text-gray-400">accuracy</span>
+        <span className="text-caption text-text-muted">accuracy</span>
       </div>
     </div>
   );

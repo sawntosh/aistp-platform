@@ -4,11 +4,13 @@ from .models import (
     AnswerOption,
     Attempt,
     Domain,
+    DomainResource,
     FillBlankAnswer,
     GenerationJob,
     MatchingPair,
     PracticeSession,
     Question,
+    Topic,
 )
 
 
@@ -29,10 +31,18 @@ class MatchingPairInline(admin.TabularInline):
 
 @admin.register(Question)
 class QuestionAdmin(admin.ModelAdmin):
-    list_display = ("id", "domain", "question_type", "difficulty", "learning_objective_id", "is_active", "created_at")
-    list_filter = ("domain", "question_type", "difficulty", "is_active")
+    list_display = ("id", "domain", "topic", "question_type", "difficulty", "learning_objective_id", "is_active", "created_at")
+    list_filter = ("domain", "topic", "question_type", "difficulty", "is_active")
     search_fields = ("text", "learning_objective_id", "learning_objective")
     inlines = [AnswerOptionInline, FillBlankAnswerInline, MatchingPairInline]
+
+
+@admin.register(Topic)
+class TopicAdmin(admin.ModelAdmin):
+    list_display = ("id", "domain", "title", "order", "is_active")
+    list_filter = ("domain", "is_active")
+    search_fields = ("title", "description")
+    ordering = ("domain", "order")
 
 
 @admin.register(GenerationJob)
@@ -42,14 +52,21 @@ class GenerationJobAdmin(admin.ModelAdmin):
     readonly_fields = ("progress", "result_summary", "error_message", "created_at", "updated_at")
 
 
+class DomainResourceInline(admin.TabularInline):
+    model = DomainResource
+    extra = 1
+
+
 @admin.register(Domain)
 class DomainAdmin(admin.ModelAdmin):
     list_display = ("id", "name")
+    inlines = [DomainResourceInline]
 
 
 @admin.register(PracticeSession)
 class PracticeSessionAdmin(admin.ModelAdmin):
-    list_display = ("id", "user", "started_at", "finished_at", "question_count", "score")
+    list_display = ("id", "user", "mode", "started_at", "finished_at", "question_count", "score")
+    list_filter = ("mode",)
 
 
 @admin.register(Attempt)

@@ -8,13 +8,21 @@ from rest_framework import serializers
 
 from services.question_generation_service import DOMAIN_TITLES
 
-from .models import AnswerOption, Domain, FillBlankAnswer, GenerationJob, MatchingPair, Question
+from .models import AnswerOption, Domain, DomainResource, FillBlankAnswer, GenerationJob, MatchingPair, Question
+
+
+class DomainResourceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DomainResource
+        fields = ("id", "title", "url")
 
 
 class DomainSerializer(serializers.ModelSerializer):
+    resources = DomainResourceSerializer(many=True, read_only=True)
+
     class Meta:
         model = Domain
-        fields = ("id", "name", "description")
+        fields = ("id", "name", "description", "resources")
 
 
 class AnswerOptionPublicSerializer(serializers.ModelSerializer):
