@@ -227,7 +227,12 @@ class TestModeRegressionTests(TestCase):
         session_id = list_resp.json()["session_id"]
         self.client.post(
             "/api/questions/submit/",
-            {"session_id": session_id, "question_id": self.question.id, "selected_option_id": self.correct_option.id},
+            {
+                "session_id": session_id,
+                "question_id": self.question.id,
+                "selected_option_id": self.correct_option.id,
+                "confidence": 3,  # required for Test Mode submissions
+            },
             format="json",
         )
         record = PerformanceAnalytics.objects.get(user=self.user, domain=self.domain)

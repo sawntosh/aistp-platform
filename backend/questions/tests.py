@@ -84,6 +84,7 @@ class QuestionDeliveryTests(APITestCase):
                 "session_id": session.id,
                 "question_id": self.question.id,
                 "selected_option_id": self.correct.id,
+                "confidence": 4,  # required for Test Mode submissions
             },
         )
         record = PerformanceAnalytics.objects.get(user=self.user, domain=self.domain)

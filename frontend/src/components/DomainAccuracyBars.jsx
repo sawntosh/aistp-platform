@@ -40,6 +40,18 @@ export default function DomainAccuracyBars({ domains }) {
               </div>
             </div>
             <Progress value={Math.min(100, d.accuracy_percent)} tone={isWeak ? "error" : "default"} />
+            {(d.average_confidence != null || d.high_confidence_mistakes > 0) && (
+              <p className="mt-1 text-caption text-text-muted">
+                {d.average_confidence != null && <>Avg confidence {d.average_confidence} / 5</>}
+                {d.average_confidence != null && d.high_confidence_mistakes > 0 && " · "}
+                {d.high_confidence_mistakes > 0 && (
+                  <span className="text-warning">
+                    {d.high_confidence_mistakes} high-confidence mistake
+                    {d.high_confidence_mistakes === 1 ? "" : "s"}
+                  </span>
+                )}
+              </p>
+            )}
           </div>
         );
       })}

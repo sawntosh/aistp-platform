@@ -6,6 +6,7 @@ import { useCountUp } from "../hooks/useCountUp";
 import AccuracyRing from "../components/AccuracyRing";
 import DomainAccuracyBars from "../components/DomainAccuracyBars";
 import AttemptHistoryTable from "../components/AttemptHistoryTable";
+import ConfidenceInsights from "../components/ConfidenceInsights";
 import StudyModeCard from "../components/StudyModeCard";
 import { Card, CardContent } from "../components/ui/Card";
 import { SectionHeader } from "../components/ui/PageHeader";
@@ -215,6 +216,17 @@ export default function DashboardPage() {
                   className="mb-4"
                 />
                 <DomainAccuracyBars domains={domains} />
+              </CardContent>
+            </Card>
+
+            <Card className="mb-6">
+              <CardContent>
+                <SectionHeader
+                  title="Confidence insights"
+                  description="From Test Mode · a diagnostic signal, not part of your score"
+                  className="mb-4"
+                />
+                <ConfidenceInsights confidence={data?.confidence} />
               </CardContent>
             </Card>
 
