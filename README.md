@@ -34,6 +34,7 @@ tracking, and domain-level performance analytics.
 - 📊 **Analytics dashboard** — per-domain accuracy, weakest domains, session history & streak, plus Test Mode confidence insights (average confidence, accuracy by confidence level, high-confidence mistakes)
 - 🛠️ **Admin CRUD** — manage questions and domains, with a paginated, domain-filtered question list and bulk JSON import
 - 🧭 **Redesigned UI** — shared design system, left sidebar navigation for signed-in users, session customization (mode, domain filter, length), paged practice sessions with a question navigator
+- 📖 **Interactive API docs** — Swagger UI & ReDoc auto-generated from the code (drf-spectacular)
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -44,6 +45,7 @@ tracking, and domain-level performance analytics.
 | Frontend   | React 18, Next.js 14 (Pages Router), Tailwind CSS             |
 | Backend    | Django 6.0, Django REST Framework                             |
 | Auth       | djangorestframework-simplejwt, bcrypt                         |
+| API docs   | drf-spectacular (Swagger UI + ReDoc)                          |
 | Database   | PostgreSQL (Supabase free tier); SQLite fallback for local dev |
 | AI         | Groq API (`llama-3.3-70b-versatile`)                          |
 
@@ -108,15 +110,26 @@ python manage.py test questions analytics study --noinput
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
-## 🌐 API Overview
+## 📖 API Documentation
 
-| Prefix                | Purpose                                                        |
-|-----------------------|---------------------------------------------------------------- |
-| `/api/auth/`          | Register, login, token refresh, current user                   |
-| `/api/questions/`     | Session delivery, answer submission, finish/review, admin CRUD + import, RAG generation |
-| `/api/explain/`       | On-demand AI explanation for a question                        |
-| `/api/analytics/`     | Dashboard: accuracy, weakest domains, session history, confidence insights |
-| `/api/study/`         | Study Mode: domains, topics, start topic, answer, complete     |
+Interactive OpenAPI docs are generated with [`drf-spectacular`](https://drf-spectacular.readthedocs.io/).
+Start the backend (`python manage.py runserver`) and open:
+
+| URL | What it is |
+|-----|------------|
+| `http://127.0.0.1:8000/api/docs/`   | **Swagger UI** — browse and try every endpoint |
+| `http://127.0.0.1:8000/api/redoc/`  | **ReDoc** — reference-style rendering |
+| `http://127.0.0.1:8000/api/schema/` | Raw OpenAPI 3 schema |
+
+### Endpoint groups
+
+| Prefix              | Purpose                                                        |
+|---------------------|---------------------------------------------------------------- |
+| `/api/auth/`        | Register, login, token refresh, current user                   |
+| `/api/questions/`   | Session delivery, answer + confidence submission, finish/review, admin CRUD + import, RAG generation |
+| `/api/explain/`     | On-demand AI explanation for a question                        |
+| `/api/analytics/`   | Dashboard: accuracy, weakest domains, session history, confidence insights |
+| `/api/study/`       | Study Mode: domains, topics, start topic, answer, complete     |
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -163,6 +176,7 @@ aistp-platform/
 - [x] Analytics dashboard (per-domain accuracy, streak, session history)
 - [x] Test Mode confidence tracking & high-confidence-mistake diagnostics
 - [x] Admin CRUD with paginated question list
+- [x] Interactive API docs (Swagger / ReDoc via drf-spectacular)
 - [ ] AI explanation caching
 - [ ] Frontend test suite
 - [ ] CI/CD deployment pipeline
