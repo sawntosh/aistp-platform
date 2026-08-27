@@ -120,6 +120,16 @@ python manage.py test questions analytics study --noinput
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
+## 📖 API Documentation (Swagger)
+
+Interactive OpenAPI docs are generated automatically with [`drf-spectacular`](https://drf-spectacular.readthedocs.io/). Start the backend (`python manage.py runserver`) and open:
+
+| URL | What it is |
+|-----|------------|
+| `http://127.0.0.1:8000/api/docs/`   | **Swagger UI** — browse endpoint and run 
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
 ## 📁 Project Structure
 
 ```
