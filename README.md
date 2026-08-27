@@ -38,6 +38,7 @@ An ISTQB CTFL v4.0 exam-prep platform with Groq-powered explanations, RAG-based 
 | Frontend   | React, Next.js, Tailwind CSS                             |
 | Backend    | Django, Django REST Framework                             |
 | Auth       | djangorestframework-simplejwt, bcrypt                      |
+| API docs   | drf-spectacular (Swagger UI + ReDoc)                       |
 | Database   | PostgreSQL (Supabase free tier)                            |
 | AI         | Groq API (`llama-3.3-70b-versatile`)                       |
 
@@ -84,6 +85,33 @@ npm run dev
 ```
 
 App runs at `http://localhost:3000` · API at `http://127.0.0.1:8000/api/` · Admin at `http://127.0.0.1:8000/admin/`
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+## 📖 API Documentation (Swagger)
+
+Interactive OpenAPI docs are generated automatically with [`drf-spectacular`](https://drf-spectacular.readthedocs.io/). Start the backend (`python manage.py runserver`) and open:
+
+| URL | What it is |
+|-----|------------|
+| `http://127.0.0.1:8000/api/docs/`   | **Swagger UI** — browse every endpoint and run requests with *Try it out* |
+| `http://127.0.0.1:8000/api/redoc/`  | ReDoc — clean read-only reference view |
+| `http://127.0.0.1:8000/api/schema/` | Raw OpenAPI 3 schema (YAML), e.g. for Postman/Thunder Client import |
+
+### Authorizing requests in Swagger UI
+
+Most endpoints need a JWT. In the UI:
+
+1. Call `POST /api/auth/login/` with a valid `username` / `password` and copy the `access` token from the response.
+2. Click **Authorize** (top-right), paste the token, and confirm.
+3. All subsequent *Try it out* calls send `Authorization: Bearer <token>` automatically. Admin-only endpoints additionally require a user whose `role` is `admin`.
+
+### Export the schema to a file
+
+```bash
+cd backend
+python manage.py spectacular --file schema.yaml
+```
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
