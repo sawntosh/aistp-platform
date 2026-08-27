@@ -1,16 +1,20 @@
 import { useState } from "react";
 import { useRouter } from "next/router";
 import Link from "next/link";
+import { ArrowLeft, Check, GraduationCap } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { getErrorMessage } from "../services/apiClient";
 import PasswordInput from "../components/PasswordInput";
+import Input, { Label } from "../components/ui/Input";
+import Button from "../components/ui/Button";
+import { cn } from "../lib/cn";
 
 const STRENGTH_LEVELS = [
-  { label: "Too short", color: "bg-gray-200" },
-  { label: "Weak", color: "bg-red-400" },
-  { label: "Fair", color: "bg-yellow-400" },
-  { label: "Good", color: "bg-blue-400" },
-  { label: "Strong", color: "bg-green-500" },
+  { label: "Too short", tone: "bg-border-strong" },
+  { label: "Weak", tone: "bg-error" },
+  { label: "Fair", tone: "bg-warning" },
+  { label: "Good", tone: "bg-info" },
+  { label: "Strong", tone: "bg-success" },
 ];
 
 const GMAIL_REGEX = /^[^\s@]+@gmail\.com$/i;
@@ -85,57 +89,31 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="relative flex min-h-screen w-full items-center justify-center bg-gradient-to-b from-orange-50 via-amber-100 to-amber-200 px-4 py-12">
+    <div className="relative flex min-h-screen w-full items-center justify-center bg-background px-4 py-12">
       <Link
         href="/"
-        className="absolute top-6 left-6 flex items-center justify-center w-10 h-10 rounded-full bg-white/70 hover:bg-white transition"
         aria-label="Back to home"
+        className="absolute top-6 left-6 flex h-10 w-10 items-center justify-center rounded-full text-text-muted transition-colors hover:bg-surface-muted hover:text-text-primary"
       >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="20"
-          height="20"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-          <polyline points="9 22 9 12 15 12 15 22" />
-        </svg>
+        <ArrowLeft className="h-5 w-5" aria-hidden="true" />
       </Link>
 
-      <div className="w-full max-w-sm rounded-[2rem] bg-white p-8 shadow-xl">
+      <div className="w-full max-w-sm rounded-lg border border-border bg-surface p-8 shadow-sm">
         <div className="mb-6 flex flex-col items-center text-center">
-          <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-amber-300 to-orange-400 text-2xl shadow-md">
-            🎓
-          </div>
-          <h1 className="text-2xl font-semibold text-gray-900">Create your account</h1>
-          <p className="text-sm text-gray-500">Start practicing for CTFL</p>
+          <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-primary-muted text-primary">
+            <GraduationCap className="h-6 w-6" aria-hidden="true" />
+          </span>
+          <h1 className="text-h1 text-text-primary">Create your account</h1>
+          <p className="mt-1 text-body-sm text-text-muted">Start practicing for CTFL</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label htmlFor="username" className="block text-sm font-medium text-gray-700">
-              Username
-            </label>
-            <input
-              id="username"
-              name="username"
-              type="text"
-              required
-              autoComplete="username"
-              value={form.username}
-              onChange={handleChange}
-              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm transition-colors focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400"
-            />
+            <Label htmlFor="username">Username</Label>
+            <Input id="username" name="username" type="text" required autoComplete="username" value={form.username} onChange={handleChange} />
           </div>
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-              Email
-            </label>
-            <input
+            <Label htmlFor="email">Email</Label>
+            <Input
               id="email"
               name="email"
               type="email"
@@ -146,44 +124,26 @@ export default function RegisterPage() {
               title="Must be a Gmail address, e.g. name@gmail.com"
               value={form.email}
               onChange={handleChange}
-              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm transition-colors focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400"
+              invalid={emailInvalid}
             />
-            {emailInvalid && (
-              <p className="mt-1 text-xs text-red-600 animate-fade-in">Must be a Gmail address (e.g. name@gmail.com)</p>
-            )}
+            {emailInvalid && <p className="mt-1 text-caption text-error animate-fade-in">Must be a Gmail address (e.g. name@gmail.com)</p>}
           </div>
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-              Password
-            </label>
-            <PasswordInput
-              id="password"
-              name="password"
-              autoComplete="new-password"
-              minLength={MIN_PASSWORD_LENGTH}
-              value={form.password}
-              onChange={handleChange}
-            />
+            <Label htmlFor="password">Password</Label>
+            <PasswordInput id="password" name="password" autoComplete="new-password" minLength={MIN_PASSWORD_LENGTH} value={form.password} onChange={handleChange} />
             {strength && (
               <div className="mt-1.5 animate-fade-in">
                 <div className="flex gap-1">
                   {STRENGTH_LEVELS.slice(1).map((level, i) => (
-                    <div
-                      key={level.label}
-                      className={`h-1 flex-1 rounded-full transition-colors duration-200 ${
-                        i < strength.score ? strength.color : "bg-gray-200"
-                      }`}
-                    />
+                    <div key={level.label} className={cn("h-1 flex-1 rounded-full transition-colors duration-200", i < strength.score ? level.tone : "bg-surface-muted")} />
                   ))}
                 </div>
-                <p className="mt-1 text-xs text-gray-500">{strength.label}</p>
+                <p className="mt-1 text-caption text-text-muted">{strength.label}</p>
               </div>
             )}
           </div>
           <div>
-            <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
-              Confirm password
-            </label>
+            <Label htmlFor="confirmPassword">Confirm password</Label>
             <PasswordInput
               id="confirmPassword"
               name="confirmPassword"
@@ -193,50 +153,28 @@ export default function RegisterPage() {
               onChange={handleChange}
             />
             {passwordsMatch && (
-              <p className="mt-1 flex items-center gap-1 text-xs text-green-600 animate-fade-in">
-                <svg viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
-                  <path
-                    fillRule="evenodd"
-                    d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z"
-                    clipRule="evenodd"
-                  />
-                </svg>
+              <p className="mt-1 flex items-center gap-1 text-caption text-success animate-fade-in">
+                <Check className="h-3.5 w-3.5" aria-hidden="true" />
                 Passwords match
               </p>
             )}
-            {passwordsMismatch && (
-              <p className="mt-1 text-xs text-red-600 animate-fade-in">Passwords do not match</p>
-            )}
+            {passwordsMismatch && <p className="mt-1 text-caption text-error animate-fade-in">Passwords do not match</p>}
           </div>
 
           {error && (
-            <p key={errorKey} className="text-sm text-red-600 animate-fade-in">
+            <p key={errorKey} className="text-body-sm text-error animate-fade-in">
               {error}
             </p>
           )}
 
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-amber-200 to-amber-300 py-3 text-sm font-bold text-gray-900 shadow-sm transition-all hover:from-amber-300 hover:to-amber-400 active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100"
-          >
-            {isSubmitting && (
-              <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path
-                  className="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 0 1 8-8V0C5.373 0 0 5.373 0 12h4Z"
-                />
-              </svg>
-            )}
+          <Button type="submit" size="lg" isLoading={isSubmitting} className="w-full">
             {isSubmitting ? "Creating account…" : "Create account"}
-          </button>
+          </Button>
         </form>
 
-        <p className="mt-4 text-sm text-gray-600">
+        <p className="mt-4 text-center text-body-sm text-text-muted">
           Already have an account?{" "}
-          <Link href="/login" className="font-medium text-amber-600 hover:underline">
+          <Link href="/login" className="font-medium text-primary hover:underline">
             Log in
           </Link>
         </p>

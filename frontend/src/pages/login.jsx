@@ -1,22 +1,32 @@
 import { useState } from "react";
 import { useRouter } from "next/router";
 import Link from "next/link";
+import { ArrowLeft, GraduationCap, ShieldCheck } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { getErrorMessage } from "../services/apiClient";
 import PasswordInput from "../components/PasswordInput";
+import Input, { Label } from "../components/ui/Input";
+import Button from "../components/ui/Button";
+import Alert from "../components/ui/Alert";
+import SegmentedControl from "../components/ui/SegmentedControl";
 
-const FILLED_INPUT_CLASS =
-  "w-full rounded-2xl border-0 bg-gray-100 px-5 py-4 text-sm text-gray-900 placeholder-gray-500 transition-colors focus:outline-none focus:ring-2 focus:ring-amber-300";
+const ROLES = [
+  { value: "student", label: "Student", icon: GraduationCap, redirect: "/practice", subtitle: "Log in to continue your CTFL preparation" },
+  { value: "admin", label: "Admin", icon: ShieldCheck, redirect: "/admin", subtitle: "Log in to manage AISTP content" },
+];
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login } = useAuth();
+  const { login, logout } = useAuth();
+  const [role, setRole] = useState("student");
   const [form, setForm] = useState({ username: "", password: "" });
   const [error, setError] = useState("");
   const [errorKey, setErrorKey] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const justRegistered = router.query.registered === "1";
+  const activeRole = ROLES.find((r) => r.value === role) ?? ROLES[0];
+  const otherRole = ROLES.find((r) => r.value !== role);
 
   function handleChange(e) {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -32,8 +42,13 @@ export default function LoginPage() {
     setError("");
     setIsSubmitting(true);
     try {
-      await login(form);
-      router.push("/practice");
+      const me = await login(form);
+      if (me.role !== role) {
+        logout();
+        showError(`This account is a ${otherRole.label} account. Switch to "${otherRole.label}" above and try again.`);
+        return;
+      }
+      router.push(activeRole.redirect);
     } catch (err) {
       showError(getErrorMessage(err, "Invalid username or password."));
     } finally {
@@ -42,110 +57,84 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="relative flex min-h-screen w-full items-center justify-center overflow-hidden bg-gradient-to-b from-orange-50 via-amber-100 to-amber-200 px-4 py-10">
-      <div className="pointer-events-none absolute -left-20 top-16 h-64 w-64 rounded-full bg-rose-300/30 blur-3xl" />
-      <div className="pointer-events-none absolute -right-16 bottom-16 h-72 w-72 rounded-full bg-amber-300/40 blur-3xl" />
-
+    <div className="relative flex min-h-screen w-full items-center justify-center bg-background px-4 py-10">
       <Link
         href="/"
-        className="absolute top-6 left-6 flex items-center justify-center w-10 h-10 rounded-full bg-white/70 hover:bg-white transition"
         aria-label="Back to home"
+        className="absolute top-6 left-6 flex h-10 w-10 items-center justify-center rounded-full text-text-muted transition-colors hover:bg-surface-muted hover:text-text-primary"
       >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="20"
-          height="20"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-          <polyline points="9 22 9 12 15 12 15 22" />
-        </svg>
+        <ArrowLeft className="h-5 w-5" aria-hidden="true" />
       </Link>
 
-      <div className="relative w-full max-w-sm rounded-[2rem] bg-white p-8 shadow-xl">
-        <div className="relative mx-auto mb-4 flex h-20 w-20 items-center justify-center">
-          <div className="absolute inset-0 rounded-full bg-gradient-to-br from-amber-300 via-orange-400 to-rose-400 opacity-60 blur-xl" />
-          <div className="relative flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-amber-300 via-orange-400 to-rose-400 text-3xl shadow-lg">
-            🎓
-          </div>
-        </div>
-        <h1 className="text-center text-2xl font-bold text-gray-900">
-          Student{" "}
-          <span className="bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 bg-clip-text text-transparent">
-            Login
+      <div className="w-full max-w-sm rounded-lg border border-border bg-surface p-8 shadow-sm">
+        <div className="mb-6 flex flex-col items-center text-center">
+          <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-primary-muted text-primary">
+            <activeRole.icon className="h-6 w-6" aria-hidden="true" />
           </span>
-        </h1>
+          <h1 className="text-h1 text-text-primary">Welcome back</h1>
+          <p className="mt-1 text-body-sm text-text-muted">{activeRole.subtitle}</p>
+        </div>
+
+        <SegmentedControl
+          options={ROLES}
+          value={role}
+          onChange={(next) => {
+            setRole(next);
+            setError("");
+          }}
+          className="mb-6 w-full [&>button]:flex-1 [&>button]:justify-center"
+        />
 
         {justRegistered && (
-          <p className="mt-4 rounded-2xl bg-green-50 px-3 py-2 text-center text-sm text-green-700 animate-fade-in">
+          <Alert tone="success" className="mb-4">
             Account created. Log in to continue.
-          </p>
+          </Alert>
         )}
 
-        <form onSubmit={handleSubmit} className="mt-6 space-y-3">
-          <input
-            id="username"
-            name="username"
-            type="text"
-            required
-            autoComplete="username"
-            placeholder="Username"
-            aria-label="Username"
-            value={form.username}
-            onChange={handleChange}
-            className={FILLED_INPUT_CLASS}
-          />
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <Label htmlFor="username">Username</Label>
+            <Input
+              id="username"
+              name="username"
+              type="text"
+              required
+              autoComplete="username"
+              value={form.username}
+              onChange={handleChange}
+            />
+          </div>
 
-          <PasswordInput
-            id="password"
-            name="password"
-            autoComplete="current-password"
-            placeholder="Password"
-            value={form.password}
-            onChange={handleChange}
-            inputClassName={`${FILLED_INPUT_CLASS} pr-12`}
-          />
+          <div>
+            <Label htmlFor="password">Password</Label>
+            <PasswordInput
+              id="password"
+              name="password"
+              autoComplete="current-password"
+              value={form.password}
+              onChange={handleChange}
+            />
+          </div>
 
           {error && (
-            <p key={errorKey} className="text-center text-sm text-red-600 animate-fade-in">
+            <p key={errorKey} className="text-body-sm text-error animate-fade-in">
               {error}
             </p>
           )}
 
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-amber-200 to-amber-300 py-4 text-base font-bold text-gray-900 shadow-sm transition-all hover:from-amber-300 hover:to-amber-400 active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100"
-          >
-            {isSubmitting && (
-              <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path
-                  className="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 0 1 8-8V0C5.373 0 0 5.373 0 12h4Z"
-                />
-              </svg>
-            )}
-            {isSubmitting ? "Logging in…" : "Log In"}
-          </button>
+          <Button type="submit" size="lg" isLoading={isSubmitting} className="w-full">
+            {isSubmitting ? "Logging in…" : `Log in as ${activeRole.label}`}
+          </Button>
         </form>
 
-        <p className="mt-4 text-center text-sm font-medium text-amber-600">Forgot Password?</p>
-
-        <div className="mt-6 border-t border-gray-200" />
-
-        <p className="mt-4 text-center text-xs text-gray-400">
-          Don&apos;t have an account?{" "}
-          <Link href="/register" className="font-medium text-gray-600 hover:underline">
-            Register
-          </Link>
-        </p>
+        <div className="mt-6 border-t border-border pt-4 text-center">
+          <p className="text-body-sm text-text-muted">
+            Don&apos;t have an account?{" "}
+            <Link href="/register" className="font-medium text-primary hover:underline">
+              Register
+            </Link>
+          </p>
+        </div>
       </div>
     </div>
   );
