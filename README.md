@@ -33,6 +33,7 @@ tracking, and domain-level performance analytics.
 - 🏗️ **RAG question generation** — admins upload a PDF/DOCX syllabus and generate questions per domain in the background
 - 📊 **Analytics dashboard** — per-domain accuracy, weakest domains, session history & streak, plus Test Mode confidence insights (average confidence, accuracy by confidence level, high-confidence mistakes)
 - 🛠️ **Admin CRUD** — manage questions and domains, with a paginated, domain-filtered question list and bulk JSON import
+- 🧭 **Redesigned UI** — shared design system, left sidebar navigation for signed-in users, session customization (mode, domain filter, length), paged practice sessions with a question navigator
 - 📖 **Interactive API docs** — Swagger UI & ReDoc auto-generated from the code (drf-spectacular)
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
