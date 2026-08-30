@@ -203,8 +203,11 @@ class AnswerSubmitSerializer(serializers.Serializer):
     question_id = serializers.IntegerField()
     selected_option_id = serializers.IntegerField(required=False)
     selected_option_ids = serializers.ListField(child=serializers.IntegerField(), required=False)
-    text_answer = serializers.CharField(required=False, allow_blank=True)
-    matching_response = serializers.DictField(child=serializers.CharField(), required=False)
+    # max_length mirrors Attempt.text_answer's varchar(255): without it an
+    # over-long answer is silently truncated-and-stored on SQLite but raises
+    # DataError -> HTTP 500 on PostgreSQL (the production database).
+    text_answer = serializers.CharField(required=False, allow_blank=True, max_length=255)
+    matching_response = serializers.DictField(child=serializers.CharField(max_length=255), required=False)
     # Test Mode self-rated confidence (1-5). Optional at this layer;
     # AnswerSubmitView enforces it as required for Test Mode sessions and
     # ignores it for Practice Mode. Stored on Attempt.confidence, never

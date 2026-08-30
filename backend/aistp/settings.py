@@ -81,10 +81,15 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_CLASSES": (
         "rest_framework.throttling.ScopedRateThrottle",
     ),
-    # T-08/T-09 (DoS): rate limits on login and AI explain endpoints
+    # T-08/T-09 (DoS): rate limits on registration, login and AI explain
+    # endpoints -- all unauthenticated or cheap-to-spam.
     "DEFAULT_THROTTLE_RATES": {
+        "register": "10/min",
         "login": "20/min",
         "explain": "10/min",
+        # Register-form live username/email lookup -- read-only, fired on
+        # every debounced keystroke, so it needs more headroom than register.
+        "availability": "60/min",
     },
     # OpenAPI schema generation for Swagger UI / ReDoc (drf-spectacular).
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
@@ -170,7 +175,7 @@ AUTH_PASSWORD_VALIDATORS = [
     },
     {
         'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-        'OPTIONS': {'min_length': 6},
+        'OPTIONS': {'min_length': 8},
     },
     {
         'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
@@ -178,7 +183,42 @@ AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
     },
+    {
+        # 8+ / uppercase / digit / symbol -- matches the register form's
+        # strength meter so the policy holds when the API is called directly.
+        'NAME': 'accounts.validators.ComplexityValidator',
+    },
 ]
+
+# -- Email (verification links) -------------------------------------------
+# Console backend by default: the verification URL is printed to the
+# runserver terminal, no SMTP needed. Set EMAIL_HOST in the environment to
+# switch to real SMTP (e.g. smtp.gmail.com with a Google App Password).
+EMAIL_HOST = os.getenv("EMAIL_HOST", "")
+if EMAIL_HOST:
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+    EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
+    EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+    EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
+    EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "1") == "1"
+else:
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "AISTP <no-reply@aistp.local>")
+
+# Where the emailed verification link points (the frontend route that
+# reads ?token= and POSTs it to /api/auth/verify-email/).
+FRONTEND_BASE_URL = os.getenv("FRONTEND_BASE_URL", "http://localhost:3000")
+
+# Signed email-verification token lifetime.
+EMAIL_VERIFICATION_MAX_AGE = int(os.getenv("EMAIL_VERIFICATION_MAX_AGE", str(3 * 24 * 3600)))
+
+# -- Login lockout (on top of the 20/min scoped rate throttle) -----------
+# N consecutive failed logins for the same (username, IP) -> the pair is
+# locked for LOGIN_LOCK_SECONDS. Any successful login clears the counter.
+LOGIN_MAX_FAILURES = int(os.getenv("LOGIN_MAX_FAILURES", "5"))
+LOGIN_LOCK_SECONDS = int(os.getenv("LOGIN_LOCK_SECONDS", "60"))
+LOGIN_FAILURE_WINDOW_SECONDS = int(os.getenv("LOGIN_FAILURE_WINDOW_SECONDS", "900"))
 
 
 # Internationalization

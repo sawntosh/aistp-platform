@@ -12,6 +12,29 @@ export async function register({ username, email, password, confirmPassword }) {
   });
 }
 
+// Live register-form check. Returns {username_available?, email_available?}
+// where a field is omitted / null when the value isn't a valid format yet.
+export async function checkAvailability({ username, email } = {}) {
+  const params = new URLSearchParams();
+  if (username) params.set("username", username);
+  if (email) params.set("email", email);
+  return apiFetch(`/auth/availability/?${params.toString()}`);
+}
+
+export async function verifyEmail(token) {
+  return apiFetch("/auth/verify-email/", {
+    method: "POST",
+    body: JSON.stringify({ token }),
+  });
+}
+
+export async function resendVerification(email) {
+  return apiFetch("/auth/resend-verification/", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+}
+
 export async function login({ username, password }) {
   const data = await apiFetch("/auth/login/", {
     method: "POST",

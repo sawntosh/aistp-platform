@@ -25,8 +25,11 @@ class StudyAnswerSubmitSerializer(serializers.Serializer):
     question_id = serializers.IntegerField()
     selected_option_id = serializers.IntegerField(required=False)
     selected_option_ids = serializers.ListField(child=serializers.IntegerField(), required=False)
-    text_answer = serializers.CharField(required=False, allow_blank=True)
-    matching_response = serializers.DictField(child=serializers.CharField(), required=False)
+    # See questions.serializers.AnswerSubmitSerializer: cap at
+    # StudyAttempt.text_answer's varchar(255) so an over-long answer is a
+    # clean 400 rather than a PostgreSQL DataError / 500.
+    text_answer = serializers.CharField(required=False, allow_blank=True, max_length=255)
+    matching_response = serializers.DictField(child=serializers.CharField(max_length=255), required=False)
 
 
 def _topic_progress_map(user, topics):
@@ -173,6 +176,15 @@ class StudyAnswerView(APIView):
             id=data["question_id"],
             is_active=True,
         )
+        # A Study session is scoped to one topic (StudyTopicStartView only
+        # ever serves that topic's tagged questions). Reject answers for any
+        # other question so a StudyAttempt can't be recorded -- and the
+        # reveal payload returned -- for an arbitrary bank question.
+        if question.topic_id != session.topic_id:
+            return Response(
+                {"detail": "This question is not part of the topic being studied."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         qtype = question.question_type
 
         submission = {}
