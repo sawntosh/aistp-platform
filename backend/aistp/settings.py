@@ -95,7 +95,7 @@ SPECTACULAR_SETTINGS = {
     "DESCRIPTION": (
         "AI-assisted ISTQB study platform -- registration/auth, question "
         "delivery and scoring, AI answer explanations, domain analytics, "
-        "and admin question CRUD / RAG generation."
+        "Study Mode, and admin question CRUD / RAG generation."
     ),
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
@@ -108,6 +108,7 @@ SPECTACULAR_SETTINGS = {
         {"name": "questions", "description": "Session delivery, answer submission, domains."},
         {"name": "explain", "description": "AI-generated answer explanations (cached)."},
         {"name": "analytics", "description": "Per-domain accuracy dashboard."},
+        {"name": "study", "description": "Study Mode: domains, topics, reading content, progress."},
     ],
     "SWAGGER_UI_SETTINGS": {
         "persistAuthorization": True,

@@ -99,7 +99,7 @@ Create `frontend/.env.local`:
 NEXT_PUBLIC_API_BASE_URL=http://localhost:8000/api
 ```
 
-App runs at `http://localhost:3000` · API at `http://127.0.0.1:8000/api/` · Django admin at `http://127.0.0.1:8000/admin/`
+App runs at `http://localhost:3000` · API at `http://127.0.0.1:8000/api/` · API docs at `http://127.0.0.1:8000/api/docs/` · Django admin at `http://127.0.0.1:8000/admin/`
 
 ### Tests
 
