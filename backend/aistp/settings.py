@@ -99,6 +99,8 @@ SPECTACULAR_SETTINGS = {
     ),
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
+    "CONTACT": {"name": "AISTP Platform", "url": "https://github.com/sawntosh/aistp-platform"},
+    "LICENSE": {"name": "MIT"},
     "ENUM_NAME_OVERRIDES": {
         "QuestionTypeEnum": "questions.models.Question.QuestionType",
     },
