@@ -113,6 +113,8 @@ SPECTACULAR_SETTINGS = {
     "SWAGGER_UI_SETTINGS": {
         "persistAuthorization": True,
         "displayRequestDuration": True,
+        "filter": True,
+        "docExpansion": "none",
     },
 }
 
