@@ -46,7 +46,17 @@ class DashboardView(APIView):
                 )
             )
 
-        sessions = PracticeSession.objects.filter(user=request.user).order_by("-started_at")
+        # Only Test Mode sessions feed the performance report (sessions
+        # completed, questions answered, streak, accuracy, attempt history).
+        # Practice Mode is low-stakes rehearsal and is deliberately kept out
+        # of the dashboard aggregates -- matches the analytics gating in
+        # questions.views.AnswerSubmitView / services.analytics_service.
+        sessions = (
+            PracticeSession.objects.filter(
+                user=request.user, mode=PracticeSession.Mode.TEST
+            )
+            .order_by("-started_at")
+        )
         session_data = [
             {
                 "id": session.id,
