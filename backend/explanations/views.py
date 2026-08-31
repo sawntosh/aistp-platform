@@ -17,6 +17,7 @@ from services.explanation_service import (
     PROMPT_VERSION,
     ExplanationServiceError,
     build_fallback_explanation,
+    explanation_has_required_sections,
     generate_explanation,
 )
 
@@ -74,14 +75,37 @@ def _build_answer_context(question):
     return None
 
 
-def _context_hash(question, prompt_block):
+def _build_concept_context(question):
+    """Plain-text block naming the question's domain / syllabus topic /
+    learning objective, passed to Groq to ground the "## ISTQB Concept"
+    section. Never carries the correct answer -- that stays in
+    _build_answer_context()'s prompt_block and is the only source of
+    truth. Always returns at least the domain line (domain is required
+    on Question)."""
+    parts = [f"Domain: {question.domain.name}"]
+    description = (question.domain.description or "").strip()
+    if description:
+        parts.append(f"Domain overview: {description[:300]}")
+    if question.topic_id:
+        parts.append(f"Syllabus topic: {question.topic.title}")
+    if question.learning_objective:
+        parts.append(f"Learning objective: {question.learning_objective}")
+    if question.source_section:
+        parts.append(f"Syllabus section: {question.source_section}")
+    return "Context for identifying the ISTQB concept:\n" + "\n".join(parts)
+
+
+def _context_hash(question, prompt_block, concept_context=""):
     """Fingerprints everything that should invalidate a cached explanation:
-    the prompt template version plus the question's own content. If an
-    admin edits the question text/options/pairs, or the AI prompt itself
-    changes (PROMPT_VERSION bump in explanation_service.py), the hash
-    changes and the next request regenerates instead of serving stale
-    cached text forever."""
-    raw = "|".join([PROMPT_VERSION, question.question_type, question.text, prompt_block])
+    the prompt template version, the question's own content, and the
+    domain/topic context fed to the "## ISTQB Concept" section. If an
+    admin edits the question text/options/pairs or its domain/topic, or
+    the AI prompt itself changes (PROMPT_VERSION bump in
+    explanation_service.py), the hash changes and the next request
+    regenerates instead of serving stale cached text forever."""
+    raw = "|".join(
+        [PROMPT_VERSION, question.question_type, question.text, prompt_block, concept_context]
+    )
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
@@ -113,7 +137,8 @@ class ExplainView(APIView):
                 status=status.HTTP_422_UNPROCESSABLE_ENTITY,
             )
 
-        context_hash = _context_hash(question, answer_context["prompt_block"])
+        concept_context = _build_concept_context(question)
+        context_hash = _context_hash(question, answer_context["prompt_block"], concept_context)
 
         cached = AIExplanation.objects.filter(question=question, context_hash=context_hash).first()
         if cached:
@@ -138,7 +163,10 @@ class ExplainView(APIView):
 
             try:
                 explanation_text = generate_explanation(
-                    question.text, question.question_type, answer_context["prompt_block"]
+                    question.text,
+                    question.question_type,
+                    answer_context["prompt_block"],
+                    concept_context=concept_context,
                 )
             except ExplanationServiceError:
                 # Groq is down/rate-limited/returned nothing: degrade to a
@@ -146,6 +174,17 @@ class ExplainView(APIView):
                 # (NFR-02 availability). Not cached, so the next request for
                 # this question retries Groq rather than being stuck with
                 # the fallback text forever.
+                fallback_text = build_fallback_explanation(answer_context["correct_summary"])
+                return Response({"explanation": fallback_text, "is_fallback": True})
+
+            if not explanation_has_required_sections(explanation_text):
+                # Groq answered, but the reply is missing required sections
+                # (wrong format, prose only, truncated mid-response).
+                # Treat it as malformed: serve the deterministic fallback
+                # and don't cache it, so a later request retries instead
+                # of being stuck on a half-formed explanation. The learner
+                # sees the same graceful fallback as for an API outage,
+                # never a raw error or an empty panel.
                 fallback_text = build_fallback_explanation(answer_context["correct_summary"])
                 return Response({"explanation": fallback_text, "is_fallback": True})
 

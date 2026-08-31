@@ -16,6 +16,13 @@ export default function StudyAnswerFeedback({ isCorrect, correctAnswerText, ques
     setExplanationError("");
     try {
       const data = await fetchExplanation(questionId);
+      if (!data?.explanation) {
+        // Shouldn't happen -- the backend always returns either a
+        // structured explanation or a fallback string -- but guard so a
+        // malformed payload shows the error state, not an empty panel.
+        setExplanationError("Couldn't load an explanation right now. Try again.");
+        return;
+      }
       setExplanation(data.explanation);
       setIsExplanationFallback(Boolean(data.is_fallback));
     } catch {

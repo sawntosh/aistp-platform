@@ -240,15 +240,17 @@ export function groupTextSections(blocks) {
 }
 
 // Recognizes section headings from both AI explanations ("Correct
-// Answer", "Exam Tip", "Key Concept") and Study Mode lesson content
-// ("Key idea", "Key points") so both can render as the same style of
-// highlighted callout instead of a plain heading + paragraph.
+// Answer", "ISTQB Concept", "Exam Tip", "Key Concept") and Study Mode
+// lesson content ("Key idea", "Key points") so both can render as the
+// same style of highlighted callout instead of a plain heading +
+// paragraph.
 function classifySection(heading) {
   if (!heading) return "plain";
   if (/correct answer/i.test(heading)) return "correct";
   if (/exam tip/i.test(heading)) return "examTip";
   if (/key point/i.test(heading)) return "keyPoints";
-  if (/key concept|key idea/i.test(heading)) return "keyConcept";
+  if (/key concept|key idea|key takeaway/i.test(heading)) return "keyConcept";
+  if (/istqb concept|testing principle/i.test(heading)) return "keyConcept";
   return "plain";
 }
 
