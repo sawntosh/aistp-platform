@@ -179,6 +179,29 @@ class AnswerSubmitView(APIView):
         )
         qtype = question.question_type
 
+        # Session/attempt integrity (see SessionFinishView / DashboardView):
+        # without these guards a client can replay submits for one question,
+        # answer questions never served in the session, or keep submitting
+        # after finishing -- each replay adds an Attempt row and (Test Mode)
+        # a record_attempt() call, inflating PerformanceAnalytics and pushing
+        # the finished session's score past question_count (dashboard then
+        # reports >100% accuracy).
+        if session.finished_at is not None:
+            return Response(
+                {"detail": "This session is already finished; no more answers can be submitted."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        if Attempt.objects.filter(session=session, question=question).exists():
+            return Response(
+                {"detail": "This question has already been answered in this session."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        if session.attempts.count() >= session.question_count:
+            return Response(
+                {"detail": "This session already has an answer for every question."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
         # Test Mode requires a 1-5 confidence rating with every answer;
         # Practice Mode does not collect it. The serializer has already
         # range-checked any value that was sent (see AnswerSubmitSerializer).
@@ -277,7 +300,13 @@ class SessionFinishView(APIView):
         session = get_object_or_404(PracticeSession, id=session_id, user=request.user)
 
         if session.finished_at is None:
-            session.score = session.attempts.filter(is_correct=True).count()
+            # Cap at question_count as defense-in-depth: AnswerSubmitView
+            # already enforces one Attempt per (session, question) and no
+            # more attempts than questions served, so this can only bite if
+            # that guard regresses -- but a stored score > question_count
+            # produces a >100% accuracy_percent on the dashboard.
+            correct = session.attempts.filter(is_correct=True).count()
+            session.score = min(correct, session.question_count)
             session.finished_at = timezone.now()
             session.save(update_fields=["score", "finished_at"])
 
@@ -394,7 +423,12 @@ class AdminQuestionViewSet(viewsets.ModelViewSet):
         queryset = super().get_queryset()
         domain_id = self.request.query_params.get("domain")
         if domain_id:
-            queryset = queryset.filter(domain_id=domain_id)
+            # A non-integer ?domain= would otherwise reach the ORM and raise
+            # ValueError (sqlite) / DataError (PostgreSQL) -> HTTP 500.
+            try:
+                queryset = queryset.filter(domain_id=int(domain_id))
+            except (TypeError, ValueError):
+                queryset = queryset.none()
         return queryset
 
     @action(detail=False, methods=["post"], url_path="import", parser_classes=[MultiPartParser, JSONParser])

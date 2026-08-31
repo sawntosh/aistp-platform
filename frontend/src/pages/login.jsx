@@ -23,6 +23,7 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [errorKey, setErrorKey] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [needsVerification, setNeedsVerification] = useState(false);
 
   const justRegistered = router.query.registered === "1";
   const activeRole = ROLES.find((r) => r.value === role) ?? ROLES[0];
@@ -40,6 +41,13 @@ export default function LoginPage() {
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
+    setNeedsVerification(false);
+
+    if (!/^[A-Za-z]+$/.test(form.username)) {
+      showError("Username must contain letters only (A–Z).");
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const me = await login(form);
@@ -50,11 +58,20 @@ export default function LoginPage() {
       }
       router.push(activeRole.redirect);
     } catch (err) {
-      showError(getErrorMessage(err, "Invalid username or password."));
+      // 403 = correct password but the account's email isn't verified yet.
+      if (err?.status === 403 && err?.body?.can_resend) {
+        setNeedsVerification(true);
+        showError(err.body.detail || "Please verify your email address before logging in.");
+      } else if (err?.status === 423) {
+        showError(err?.body?.detail || "Too many failed attempts. Try again shortly.");
+      } else {
+        showError(getErrorMessage(err, "Invalid username or password."));
+      }
     } finally {
       setIsSubmitting(false);
     }
   }
+
 
   return (
     <div className="relative flex min-h-screen w-full items-center justify-center bg-background px-4 py-10">
@@ -119,6 +136,15 @@ export default function LoginPage() {
           {error && (
             <p key={errorKey} className="text-body-sm text-error animate-fade-in">
               {error}
+            </p>
+          )}
+
+          {needsVerification && (
+            <p className="text-body-sm text-text-muted animate-fade-in">
+              <Link href="/verify-email" className="font-medium text-primary hover:underline">
+                Resend verification email
+              </Link>{" "}
+              — in local dev the link is printed to the server console.
             </p>
           )}
 
