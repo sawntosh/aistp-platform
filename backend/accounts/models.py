@@ -16,6 +16,10 @@ class User(AbstractUser):
     role = models.CharField(
         max_length=20, choices=Role.choices, default=Role.STUDENT
     )
+    # FR-01: a new account must confirm its email (via the link mailed on
+    # registration) before it can log in. LoginView returns 403 until this
+    # is True. Existing accounts are backfilled to True by migration 0002.
+    email_verified = models.BooleanField(default=False)
 
     def __str__(self):
         return f"{self.username} ({self.role})"
