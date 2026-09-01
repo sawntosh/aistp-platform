@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { useRouter } from "next/router";
-import { BarChart3, BookOpen, Info, ShieldCheck, Target } from "lucide-react";
+import { BarChart3, BookOpen, GraduationCap, Info, ShieldCheck, Target } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { usePracticeSession } from "../context/PracticeSessionContext";
 import { cn } from "../lib/cn";
@@ -8,54 +8,84 @@ import ThemeToggle from "./ui/ThemeToggle";
 import Button from "./ui/Button";
 import UserMenu from "./UserMenu";
 
+// Each section carries its own accent, matching the rest of the app
+// (Study = emerald, Test = indigo, everything else = primary blue).
 const LINKS = [
-  { href: "/study", label: "Study", icon: BookOpen },
-  { href: "/practice", label: "Test", icon: Target },
-  { href: "/dashboard", label: "Analytics", icon: BarChart3 },
+  { href: "/study", label: "Study", icon: BookOpen, tone: "study" },
+  { href: "/practice", label: "Test", icon: Target, tone: "test" },
+  { href: "/dashboard", label: "Analytics", icon: BarChart3, tone: "primary" },
 ];
+
+const GUEST_LINKS = [
+  { href: "/study", label: "Study", icon: BookOpen, tone: "study" },
+  { href: "/practice", label: "Test", icon: Target, tone: "test" },
+  { href: "/about", label: "About", icon: Info, tone: "primary" },
+];
+
+const TONE = {
+  primary: {
+    active: "border-primary text-primary bg-primary-muted/40",
+    idle: "border-transparent text-text-secondary hover:text-primary hover:border-primary/40",
+  },
+  study: {
+    active: "border-study text-study bg-study-muted/50",
+    idle: "border-transparent text-text-secondary hover:text-study hover:border-study/40",
+  },
+  test: {
+    active: "border-test text-test bg-test-muted/50",
+    idle: "border-transparent text-text-secondary hover:text-test hover:border-test/40",
+  },
+};
 
 const LOCKED_TITLE = "Finish or end your practice session first";
 
 function Logo({ disabled }) {
   return (
-    <span
-      className={cn(
-        "flex items-center gap-2 text-body font-semibold tracking-tight text-text-primary",
-        disabled && "cursor-not-allowed opacity-50"
-      )}
-    >
-      <span className="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-body-sm font-bold text-primary-foreground">
-        A
+    <span className={cn("flex items-center gap-2.5", disabled && "cursor-not-allowed opacity-50")}>
+      <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-test text-white shadow-md shadow-primary/25">
+        <GraduationCap className="h-[18px] w-[18px]" aria-hidden="true" />
       </span>
-      AISTP
+      <span className="flex items-baseline gap-2 leading-none">
+        <span className="text-body font-bold tracking-tight text-text-primary">AISTP</span>
+        <span className="hidden border-l border-primary/20 pl-2 text-caption font-semibold uppercase tracking-wide text-text-muted md:inline">
+          ISTQB CTFL Practice
+        </span>
+      </span>
     </span>
   );
 }
 
-function NavLink({ href, label, icon: Icon, isActive, disabled }) {
+function NavTab({ href, label, icon: Icon, tone = "primary", isActive, disabled }) {
+  const base =
+    "flex items-center gap-1.5 border-b-2 px-3 text-body-sm font-medium transition-colors duration-150";
+  const t = TONE[tone] ?? TONE.primary;
+
   if (disabled) {
     return (
       <span
         title={LOCKED_TITLE}
-        className="flex cursor-not-allowed items-center gap-1.5 rounded-md px-3 py-1.5 text-body-sm font-medium text-text-muted opacity-50"
+        className={cn(base, "cursor-not-allowed border-transparent text-text-muted opacity-50")}
       >
         {Icon && <Icon className="h-4 w-4" aria-hidden="true" />}
         {label}
       </span>
     );
   }
+
   return (
     <Link
       href={href}
-      className={cn(
-        "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-body-sm font-medium transition-colors duration-150",
-        isActive ? "bg-primary-muted text-primary" : "text-text-secondary hover:bg-surface-muted hover:text-text-primary"
-      )}
+      aria-current={isActive ? "page" : undefined}
+      className={cn(base, isActive ? t.active : t.idle)}
     >
       {Icon && <Icon className="h-4 w-4" aria-hidden="true" />}
       {label}
     </Link>
   );
+}
+
+function Divider() {
+  return <span aria-hidden="true" className="mx-2 hidden h-6 w-px self-center bg-border sm:block" />;
 }
 
 export default function NavBar({ compact = false }) {
@@ -71,7 +101,13 @@ export default function NavBar({ compact = false }) {
   // Auth pages are standalone, full-screen designs -- no site chrome.
   if (router.pathname === "/login" || router.pathname === "/register") return null;
 
-  const links = user?.role === "admin" ? [...LINKS, { href: "/admin", label: "Admin", icon: ShieldCheck }] : LINKS;
+  const links =
+    user?.role === "admin"
+      ? [...LINKS, { href: "/admin", label: "Admin", icon: ShieldCheck, tone: "primary" }]
+      : LINKS;
+
+  const isLinkActive = (href) =>
+    router.pathname === href || router.pathname.startsWith(`${href}/`);
 
   return (
     <nav
@@ -82,46 +118,71 @@ export default function NavBar({ compact = false }) {
         compact && "sm:hidden"
       )}
     >
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6">
-        {isSessionActive ? (
-          <span title={LOCKED_TITLE}>
-            <Logo disabled />
-          </span>
-        ) : (
-          <Link href={user ? "/dashboard" : "/"}>
-            <Logo />
-          </Link>
-        )}
+      {/* Certification-portal accent: a thin blue -> indigo -> emerald rule
+          tying the three product areas together. */}
+      <div aria-hidden="true" className="h-1 w-full bg-gradient-to-r from-primary via-test to-study" />
+
+      <div className="mx-auto flex h-16 max-w-6xl items-stretch justify-between px-4 sm:px-6">
+        <div className="flex items-center">
+          {isSessionActive ? (
+            <span title={LOCKED_TITLE}>
+              <Logo disabled />
+            </span>
+          ) : (
+            <Link
+              href={user ? "/dashboard" : "/"}
+              className="rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            >
+              <Logo />
+            </Link>
+          )}
+        </div>
 
         {user ? (
-          <div className="flex items-center gap-1">
-            <div className="hidden items-center gap-1 sm:flex">
+          <div className="flex items-stretch">
+            <div className="hidden items-stretch sm:flex">
               {links.map((link) => (
-                <NavLink
+                <NavTab
                   key={link.href}
                   {...link}
                   disabled={isSessionActive}
-                  isActive={router.pathname === link.href || router.pathname.startsWith(`${link.href}/`)}
+                  isActive={isLinkActive(link.href)}
                 />
               ))}
             </div>
-            <ThemeToggle className="ml-1" />
-            <UserMenu name={user.username} onLogout={handleLogout} disabled={isSessionActive} disabledTitle={LOCKED_TITLE} />
+            <Divider />
+            <div className="flex items-center gap-1 self-center">
+              <ThemeToggle />
+              <UserMenu
+                name={user.username}
+                onLogout={handleLogout}
+                disabled={isSessionActive}
+                disabledTitle={LOCKED_TITLE}
+              />
+            </div>
           </div>
         ) : (
-          <div className="flex items-center gap-1 sm:gap-2">
-            <div className="hidden items-center gap-1 sm:flex">
-              <NavLink href="/study" label="Study" icon={BookOpen} isActive={router.pathname.startsWith("/study")} />
-              <NavLink href="/practice" label="Test" icon={Target} isActive={router.pathname === "/practice"} />
-              <NavLink href="/about" label="About" icon={Info} isActive={router.pathname === "/about"} />
+          <div className="flex items-stretch">
+            <div className="hidden items-stretch sm:flex">
+              {GUEST_LINKS.map((link) => (
+                <NavTab key={link.href} {...link} isActive={isLinkActive(link.href)} />
+              ))}
             </div>
-            <ThemeToggle />
-            <Button href="/login" variant="ghost" size="sm">
-              Log in
-            </Button>
-            <Button href="/register" variant="primary" size="sm">
-              Register
-            </Button>
+            <Divider />
+            <div className="flex items-center gap-2 self-center">
+              <ThemeToggle />
+              <Button href="/login" variant="ghost" size="sm">
+                Log in
+              </Button>
+              <Button
+                href="/register"
+                variant="primary"
+                size="sm"
+                className="bg-gradient-to-r from-primary to-test shadow-sm shadow-primary/30 hover:opacity-90"
+              >
+                Register
+              </Button>
+            </div>
           </div>
         )}
       </div>

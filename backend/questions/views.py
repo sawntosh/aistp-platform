@@ -98,7 +98,7 @@ class QuestionListView(APIView):
     @extend_schema(
         parameters=[
             OpenApiParameter("count", OpenApiTypes.INT, description="Questions to serve (1-40, default 10)."),
-            OpenApiParameter("domains", OpenApiTypes.STR, description="Comma-separated domain ids to filter by."),
+            OpenApiParameter("domains", OpenApiTypes.STR, description="Comma-separated domain ids to filter by (Practice Mode only; ignored when mode=test)."),
         ],
         responses=OpenApiTypes.OBJECT,
         summary="Start a practice session",
@@ -117,8 +117,12 @@ class QuestionListView(APIView):
 
         questions_qs = Question.objects.filter(is_active=True)
 
+        # Test Mode is a real-exam simulation: it always draws from every
+        # domain, so a domain filter is ignored (Practice Mode still honors
+        # it). _pick_stratified_question_ids then spreads the selection
+        # across all active domains.
         domains_param = request.query_params.get("domains")
-        if domains_param:
+        if domains_param and mode != PracticeSession.Mode.TEST:
             try:
                 domain_ids = [int(value) for value in domains_param.split(",") if value.strip()]
             except ValueError:

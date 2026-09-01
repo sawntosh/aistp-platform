@@ -182,7 +182,10 @@ export default function PracticePage() {
     setLoadError("");
     setIsLoadingQuestions(true);
     try {
-      const data = await fetchPracticeQuestions(sessionLength, selectedDomainIds, mode);
+      // Test Mode is a real-exam simulation: it always draws from every
+      // domain, so any domain filter is ignored.
+      const domainIds = mode === "test" ? [] : selectedDomainIds;
+      const data = await fetchPracticeQuestions(sessionLength, domainIds, mode);
       setQuestions(data.questions);
       setTotalCount(data.questions.length);
       setCurrentPage(0);
@@ -371,7 +374,12 @@ export default function PracticePage() {
   if (!sessionStarted) {
     return (
       <div className="min-h-[calc(100vh-57px)] sm:min-h-screen bg-background px-4 py-10 sm:px-6">
-        <div className="mx-auto grid max-w-5xl grid-cols-1 gap-8 lg:grid-cols-[1fr_320px] lg:items-start">
+        <div
+          className={cn(
+            "mx-auto grid grid-cols-1 gap-8 lg:items-start",
+            mode === "test" ? "max-w-3xl" : "max-w-5xl lg:grid-cols-[1fr_320px]"
+          )}
+        >
         <div className="space-y-8">
           <div>
             {user && <p className="mb-1 text-body-sm font-medium text-test">Welcome back, {user.username}</p>}
@@ -425,38 +433,47 @@ export default function PracticePage() {
             </div>
           </div>
 
-          <div>
-            <h2 className="mb-1 text-label text-text-secondary">Filter by domain</h2>
-            <p className="mb-3 text-caption text-text-muted">Optional — leave all unselected to practice every domain.</p>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {domains.map((domain, index) => {
-                const isSelected = selectedDomainIds.includes(domain.id);
-                const Icon = DOMAIN_ICONS[index % DOMAIN_ICONS.length];
-                return (
-                  <OptionTile key={domain.id} isSelected={isSelected} onClick={() => toggleDomain(domain.id)} className="flex items-center gap-3">
-                    <span
-                      className={cn(
-                        "flex h-10 w-10 shrink-0 items-center justify-center rounded-full",
-                        isSelected ? "bg-test text-white" : "bg-surface-muted text-text-muted"
-                      )}
-                    >
-                      <Icon className="h-4 w-4" aria-hidden="true" />
-                    </span>
-                    <span className="min-w-0">
-                      <span className={cn("block truncate text-body-sm font-semibold", isSelected ? "text-test" : "text-text-primary")}>
-                        {domain.name}
-                      </span>
-                    </span>
-                    {isSelected && (
-                      <span className="ml-auto flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-test text-white">
-                        <Check className="h-3 w-3" aria-hidden="true" />
-                      </span>
-                    )}
-                  </OptionTile>
-                );
-              })}
+          {mode === "test" ? (
+            <div>
+              <h2 className="mb-1 text-label text-text-secondary">Domains</h2>
+              <p className="text-caption text-text-muted">
+                Test Mode simulates the real exam — questions are drawn from all 6 domains and can&apos;t be filtered.
+              </p>
             </div>
-          </div>
+          ) : (
+            <div>
+              <h2 className="mb-1 text-label text-text-secondary">Filter by domain</h2>
+              <p className="mb-3 text-caption text-text-muted">Optional — leave all unselected to practice every domain.</p>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {domains.map((domain, index) => {
+                  const isSelected = selectedDomainIds.includes(domain.id);
+                  const Icon = DOMAIN_ICONS[index % DOMAIN_ICONS.length];
+                  return (
+                    <OptionTile key={domain.id} isSelected={isSelected} onClick={() => toggleDomain(domain.id)} className="flex items-center gap-3">
+                      <span
+                        className={cn(
+                          "flex h-10 w-10 shrink-0 items-center justify-center rounded-full",
+                          isSelected ? "bg-test text-white" : "bg-surface-muted text-text-muted"
+                        )}
+                      >
+                        <Icon className="h-4 w-4" aria-hidden="true" />
+                      </span>
+                      <span className="min-w-0">
+                        <span className={cn("block truncate text-body-sm font-semibold", isSelected ? "text-test" : "text-text-primary")}>
+                          {domain.name}
+                        </span>
+                      </span>
+                      {isSelected && (
+                        <span className="ml-auto flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-test text-white">
+                          <Check className="h-3 w-3" aria-hidden="true" />
+                        </span>
+                      )}
+                    </OptionTile>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           <div>
             <h2 className="mb-3 text-label text-text-secondary">Session length</h2>
@@ -520,7 +537,7 @@ export default function PracticePage() {
                 <span className="font-semibold text-text-primary">{mode === "practice" ? "Practice Mode" : "Test Mode"}</span> ·{" "}
                 <span className="font-semibold text-text-primary">{sessionLength} questions</span> from{" "}
                 <span className="font-semibold text-text-primary">
-                  {selectedDomainIds.length === 0
+                  {mode === "test" || selectedDomainIds.length === 0
                     ? "all domains"
                     : `${selectedDomainIds.length} domain${selectedDomainIds.length > 1 ? "s" : ""}`}
                 </span>
@@ -533,12 +550,14 @@ export default function PracticePage() {
           </Button>
         </div>
 
-        <WeakestDomainsPanel
-          status={analyticsStatus}
-          domains={weakestDomains}
-          selectedDomainIds={selectedDomainIds}
-          onToggleDomain={addDomainFilter}
-        />
+        {mode !== "test" && (
+          <WeakestDomainsPanel
+            status={analyticsStatus}
+            domains={weakestDomains}
+            selectedDomainIds={selectedDomainIds}
+            onToggleDomain={addDomainFilter}
+          />
+        )}
         </div>
       </div>
     );

@@ -59,6 +59,22 @@ class QuestionDeliveryTests(APITestCase):
         response = self.client.get("/api/questions/?domains=abc")
         self.assertEqual(response.status_code, 400)
 
+    def test_test_mode_ignores_domain_filter_and_spans_every_domain(self):
+        other_domain = Domain.objects.create(name="Static Testing")
+        other_question = Question.objects.create(domain=other_domain, text="Static testing Q")
+        AnswerOption.objects.create(question=other_question, text="A", is_correct=True)
+        AnswerOption.objects.create(question=other_question, text="B", is_correct=False)
+
+        # Filter scoped to one domain, but mode=test -> the filter is ignored
+        # and questions come from both domains.
+        response = self.client.get(
+            f"/api/questions/?mode=test&count=10&domains={self.domain.id}"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["mode"], "test")
+        served_domains = {q["domain"]["id"] for q in response.data["questions"]}
+        self.assertEqual(served_domains, {self.domain.id, other_domain.id})
+
     def test_answer_submit_correct(self):
         session = PracticeSession.objects.create(user=self.user, question_count=1)
         response = self.client.post(

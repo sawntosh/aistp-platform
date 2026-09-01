@@ -213,6 +213,10 @@ FRONTEND_BASE_URL = os.getenv("FRONTEND_BASE_URL", "http://localhost:3000")
 # Signed email-verification token lifetime.
 EMAIL_VERIFICATION_MAX_AGE = int(os.getenv("EMAIL_VERIFICATION_MAX_AGE", str(3 * 24 * 3600)))
 
+# Signed password-reset token lifetime. Much shorter than verification --
+# a reset link grants account access, so it shouldn't linger in an inbox.
+PASSWORD_RESET_MAX_AGE = int(os.getenv("PASSWORD_RESET_MAX_AGE", str(3600)))
+
 # -- Login lockout (on top of the 20/min scoped rate throttle) -----------
 # N consecutive failed logins for the same (username, IP) -> the pair is
 # locked for LOGIN_LOCK_SECONDS. Any successful login clears the counter.
