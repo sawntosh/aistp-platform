@@ -11,7 +11,6 @@ import {
 } from "../../../../services/studyService";
 import StudySidebar from "../../../../components/StudySidebar";
 import StudyContentReader from "../../../../components/StudyContentReader";
-import StudyTransition from "../../../../components/StudyTransition";
 import StudyQuestion from "../../../../components/StudyQuestion";
 import StudyAnswerFeedback from "../../../../components/StudyAnswerFeedback";
 import StudyCompletion from "../../../../components/StudyCompletion";
@@ -59,7 +58,7 @@ export default function StudyTopicPage() {
   const [sidebarData, setSidebarData] = useState(null); // { domain, topics }
   const [start, setStart] = useState(null); // { session_id, topic, content, questions }
 
-  const [stage, setStage] = useState("reading"); // reading | transition | questions | complete
+  const [stage, setStage] = useState("study"); // study (reading + knowledge check side by side) | complete
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answer, setAnswer] = useState(null);
   const [result, setResult] = useState(null);
@@ -77,7 +76,7 @@ export default function StudyTopicPage() {
 
   async function loadTopic() {
     setPageState("loading");
-    setStage("reading");
+    setStage("study");
     setCurrentIndex(0);
     setAnswer(null);
     setResult(null);
@@ -99,17 +98,18 @@ export default function StudyTopicPage() {
 
   if (isAuthLoading || !user) return null;
 
+  const currentQuestion = start?.questions?.[currentIndex];
+  const totalQuestions = start?.questions?.length ?? 0;
+  const isLastQuestion = currentIndex === totalQuestions - 1;
+  const hasQuestionProgress = totalQuestions > 0 && (currentIndex > 0 || answer !== null || result !== null);
+
   function goToTopic(nextTopicId) {
-    if (stage === "questions" && String(nextTopicId) !== String(topicId)) {
+    if (hasQuestionProgress && String(nextTopicId) !== String(topicId)) {
       setPendingTopicSwitch(nextTopicId);
       return;
     }
     router.push(`/study/${domainId}/${nextTopicId}`);
   }
-
-  const currentQuestion = start?.questions?.[currentIndex];
-  const totalQuestions = start?.questions?.length ?? 0;
-  const isLastQuestion = currentIndex === totalQuestions - 1;
 
   async function handleCheckAnswer() {
     if (result || isChecking) return;
@@ -200,54 +200,61 @@ export default function StudyTopicPage() {
               <StudySidebar topics={sidebarData.topics} currentTopicId={Number(topicId)} onSelectTopic={goToTopic} />
             )}
 
-            {stage === "reading" && (
+            {stage === "study" && totalQuestions === 0 && (
               <StudyContentReader
                 domainName={sidebarData.domain.name}
                 topicTitle={start.topic.title}
                 topicPosition={sidebarData.topics.findIndex((t) => t.id === start.topic.id) + 1}
                 topicCount={sidebarData.topics.length}
                 content={start.content}
-                hasQuestions={totalQuestions > 0}
-                onContinue={() => (totalQuestions > 0 ? setStage("transition") : handleFinishWithoutQuestions())}
+                hasQuestions={false}
+                onContinue={handleFinishWithoutQuestions}
               />
             )}
 
-            {stage === "transition" && (
-              <div className="flex flex-1">
-                <StudyTransition topicTitle={start.topic.title} questionCount={totalQuestions} onStart={() => setStage("questions")} />
-              </div>
-            )}
+            {stage === "study" && totalQuestions > 0 && (
+              <div className="grid min-w-0 flex-1 gap-8 lg:grid-cols-2 lg:items-start">
+                <StudyContentReader
+                  domainName={sidebarData.domain.name}
+                  topicTitle={start.topic.title}
+                  topicPosition={sidebarData.topics.findIndex((t) => t.id === start.topic.id) + 1}
+                  topicCount={sidebarData.topics.length}
+                  content={start.content}
+                  hasQuestions
+                />
 
-            {stage === "questions" && currentQuestion && (
-              <div className="min-w-0 flex-1">
-                <div key={currentQuestion.id} className="animate-fade-in">
-                  <StudyQuestion
-                    question={currentQuestion}
-                    questionNumber={currentIndex + 1}
-                    totalQuestions={totalQuestions}
-                    answer={answer}
-                    onAnswerChange={(value) => {
-                      if (result) return;
-                      setAnswer(value);
-                      setAnswerError("");
-                    }}
-                    onCheck={handleCheckAnswer}
-                    isChecking={isChecking}
-                    isAnswered={Boolean(result)}
-                    result={result}
-                  />
+                <div className="min-w-0 lg:sticky lg:top-6">
+                  {currentQuestion && (
+                    <div key={currentQuestion.id} className="animate-fade-in">
+                      <StudyQuestion
+                        question={currentQuestion}
+                        questionNumber={currentIndex + 1}
+                        totalQuestions={totalQuestions}
+                        answer={answer}
+                        onAnswerChange={(value) => {
+                          if (result) return;
+                          setAnswer(value);
+                          setAnswerError("");
+                        }}
+                        onCheck={handleCheckAnswer}
+                        isChecking={isChecking}
+                        isAnswered={Boolean(result)}
+                        result={result}
+                      />
 
-                  {answerError && <p className="mt-3 text-body-sm text-error">{answerError}</p>}
+                      {answerError && <p className="mt-3 text-body-sm text-error">{answerError}</p>}
 
-                  {result && (
-                    <StudyAnswerFeedback
-                      isCorrect={result.isCorrect}
-                      correctAnswerText={result.correctAnswerText}
-                      questionId={currentQuestion.id}
-                      isLastQuestion={isLastQuestion}
-                      onReviewConcept={() => setReviewOpen(true)}
-                      onNext={handleNextQuestion}
-                    />
+                      {result && (
+                        <StudyAnswerFeedback
+                          isCorrect={result.isCorrect}
+                          correctAnswerText={result.correctAnswerText}
+                          questionId={currentQuestion.id}
+                          isLastQuestion={isLastQuestion}
+                          onReviewConcept={() => setReviewOpen(true)}
+                          onNext={handleNextQuestion}
+                        />
+                      )}
+                    </div>
                   )}
                 </div>
               </div>
