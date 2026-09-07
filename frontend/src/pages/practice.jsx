@@ -44,11 +44,16 @@ const MODES = [
   },
   {
     value: "test",
-    label: "Test Mode",
+    label: "Real Exam",
     icon: ClipboardCheck,
-    description: "Simulate the real exam — answers, explanations, and links are revealed only once you finish.",
+    description:
+      "A full ISTQB-style exam. Answer every question first — your score, the correct answers, and explanations are revealed only after you submit.",
   },
 ];
+
+// ISTQB CTFL Foundation Level standard pass mark. Presentation only — it
+// does not change how the session is scored on the backend.
+const EXAM_PASS_PERCENT = 65;
 
 function OptionTile({ isSelected, onClick, children, className = "" }) {
   return (
@@ -353,6 +358,12 @@ export default function PracticePage() {
   }
 
   function requestFinish() {
+    // Real Exam: submitting is a point of no return, so always route
+    // through the confirmation — even when every question is answered.
+    if (mode === "test") {
+      setShowEndConfirm(true);
+      return;
+    }
     if (allAnswered) {
       endSession();
     } else {
@@ -375,7 +386,9 @@ export default function PracticePage() {
         <div className="space-y-8">
           <div>
             {user && <p className="mb-1 text-body-sm font-medium text-test">Welcome back, {user.username}</p>}
-            <h1 className="text-h1 text-text-primary">Start a practice session</h1>
+            <h1 className="text-h1 text-text-primary">
+              {mode === "test" ? "Set up your exam" : "Start a practice session"}
+            </h1>
             {!user && (
               <p className="mt-1 text-body-sm text-text-muted">
                 Browse the options below freely — you&apos;ll only need an account once you&apos;re ready to
@@ -391,7 +404,7 @@ export default function PracticePage() {
                 <li>Real exam-style multiple choice questions across all 6 CTFL v4.0 knowledge domains.</li>
                 <li>
                   Practice Mode gives instant feedback, AI explanations, and domain resource links after every
-                  question — Test Mode holds all of that back until you finish, just like the real exam.
+                  question — the Real Exam holds all of that back until you submit, just like the real exam.
                 </li>
                 <li>
                   AI-generated explanations for why an answer is right or wrong, tied back to the specific
@@ -517,7 +530,7 @@ export default function PracticePage() {
                 <ClipboardCheck className="h-4 w-4" aria-hidden="true" />
               </span>
               <span>
-                <span className="font-semibold text-text-primary">{mode === "practice" ? "Practice Mode" : "Test Mode"}</span> ·{" "}
+                <span className="font-semibold text-text-primary">{mode === "practice" ? "Practice Mode" : "Real Exam"}</span> ·{" "}
                 <span className="font-semibold text-text-primary">{sessionLength} questions</span> from{" "}
                 <span className="font-semibold text-text-primary">
                   {selectedDomainIds.length === 0
@@ -529,7 +542,13 @@ export default function PracticePage() {
           </div>
 
           <Button tone="test" size="lg" onClick={startSession} isLoading={isLoadingQuestions} className="w-full">
-            {isLoadingQuestions ? "Loading questions…" : user ? "Start session" : "Log in to start"}
+            {isLoadingQuestions
+              ? "Loading questions…"
+              : !user
+                ? "Log in to start"
+                : mode === "test"
+                  ? "Start exam"
+                  : "Start session"}
           </Button>
         </div>
 
@@ -545,27 +564,42 @@ export default function PracticePage() {
   }
 
   if (isSessionComplete) {
+    const isExam = mode === "test";
     const scoreValue = finalScore ?? correctCount;
     const scorePercent = totalCount ? Math.round((scoreValue / totalCount) * 100) : 0;
     const scoreTone = scorePercent >= 70 ? "text-success" : scorePercent >= 40 ? "text-warning" : "text-error";
+    const examPassed = scorePercent >= EXAM_PASS_PERCENT;
 
     return (
       <div className="min-h-[calc(100vh-57px)] sm:min-h-screen bg-background px-4 py-10 sm:px-6">
         <div className="mx-auto max-w-2xl space-y-6">
           <Card className="p-8 text-center animate-pop">
-            <h1 className="mb-2 text-h1 text-text-primary">{mode === "test" ? "Test complete" : "Session complete"}</h1>
+            <h1 className="mb-2 text-h1 text-text-primary">{isExam ? "Exam results" : "Session complete"}</h1>
+            {isExam && (
+              <p
+                className={cn(
+                  "mx-auto mb-3 inline-flex items-center rounded-full px-3 py-1 text-body-sm font-semibold",
+                  examPassed ? "bg-success-muted text-success" : "bg-error-muted text-error"
+                )}
+              >
+                {examPassed ? "Pass" : "Fail"}
+              </p>
+            )}
             <p className={cn("mb-1 text-3xl font-semibold", scoreTone)}>
               {scoreValue} / {totalCount}
             </p>
-            <p className="mb-6 text-body-sm text-text-muted">{scorePercent}% correct</p>
+            <p className="mb-6 text-body-sm text-text-muted">
+              {scorePercent}% correct
+              {isExam && ` · ${EXAM_PASS_PERCENT}% required to pass (ISTQB CTFL standard)`}
+            </p>
             <Button tone="test" onClick={backToSetup} className="w-full">
-              Start another session
+              {isExam ? "Start another exam" : "Start another session"}
             </Button>
           </Card>
 
-          {mode === "test" && testReview && (
+          {isExam && testReview && (
             <div className="space-y-4">
-              <h2 className="text-h2 text-text-primary">Review your answers</h2>
+              <h2 className="text-h2 text-text-primary">Exam review</h2>
               {testReview.results.map((item, index) => {
                 const domainColor = getDomainColor(item.domain?.name);
                 return (
@@ -635,22 +669,47 @@ export default function PracticePage() {
   return (
     <div className="min-h-[calc(100vh-57px)] sm:min-h-screen bg-background px-4 py-10 sm:px-6">
       <div className="mx-auto max-w-2xl">
-        <div className="mb-2 flex items-center justify-between text-body-sm text-text-muted">
-          <span>
-            Questions {pageStart + 1}–{Math.min(pageStart + PER_PAGE, questions.length)} of {totalCount}
-            <span className="ml-2 text-text-muted/70">· {answeredCount} answered</span>
-          </span>
-          <div className="flex items-center gap-2">
-            {mode === "practice" && <Badge tone="test">Score: {correctCount}</Badge>}
-            <button
-              type="button"
-              onClick={() => setShowEndConfirm(true)}
-              className="cursor-pointer rounded-full border border-border px-2.5 py-0.5 text-caption font-medium text-text-muted transition-colors hover:border-error/30 hover:bg-error-muted hover:text-error"
-            >
-              End practice
-            </button>
+        {mode === "test" ? (
+          <div className="mb-4 rounded-lg border border-test/20 bg-test-muted/40 px-5 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+              <div>
+                <p className="text-caption font-semibold uppercase tracking-wide text-test">Real Exam</p>
+                <p className="text-body-sm font-medium text-text-primary">
+                  Question {pageStart + 1}–{Math.min(pageStart + PER_PAGE, questions.length)} of {totalCount}
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-body-sm tabular-nums text-text-secondary">
+                  {answeredCount}/{totalCount} answered
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowEndConfirm(true)}
+                  className="cursor-pointer rounded-md border border-test/40 px-3 py-1 text-caption font-semibold text-test transition-colors hover:bg-test hover:text-white"
+                >
+                  Submit exam
+                </button>
+              </div>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="mb-2 flex items-center justify-between text-body-sm text-text-muted">
+            <span>
+              Questions {pageStart + 1}–{Math.min(pageStart + PER_PAGE, questions.length)} of {totalCount}
+              <span className="ml-2 text-text-muted/70">· {answeredCount} answered</span>
+            </span>
+            <div className="flex items-center gap-2">
+              <Badge tone="test">Score: {correctCount}</Badge>
+              <button
+                type="button"
+                onClick={() => setShowEndConfirm(true)}
+                className="cursor-pointer rounded-full border border-border px-2.5 py-0.5 text-caption font-medium text-text-muted transition-colors hover:border-error/30 hover:bg-error-muted hover:text-error"
+              >
+                End practice
+              </button>
+            </div>
+          </div>
+        )}
 
         <Progress value={progressPercent} tone="test" className="mb-4" />
 
@@ -732,7 +791,7 @@ export default function PracticePage() {
           </span>
           {isLastPage ? (
             <Button tone="test" onClick={requestFinish}>
-              {mode === "test" ? "Finish test" : "Finish session"}
+              {mode === "test" ? "Review & submit exam" : "Finish session"}
             </Button>
           ) : (
             <Button tone="test" onClick={() => setCurrentPage((p) => Math.min(pageCount - 1, p + 1))}>
@@ -745,13 +804,25 @@ export default function PracticePage() {
       <ConfirmModal
         open={showEndConfirm}
         title={
-          allAnswered
-            ? "Finish this session?"
-            : `${totalCount - answeredCount} question${totalCount - answeredCount === 1 ? "" : "s"} still unanswered`
+          mode === "test"
+            ? "Are you sure you want to submit your exam?"
+            : allAnswered
+              ? "Finish this session?"
+              : `${totalCount - answeredCount} question${totalCount - answeredCount === 1 ? "" : "s"} still unanswered`
         }
-        message="Your progress so far will be saved, but you won't be able to resume these remaining questions."
-        confirmLabel="End session"
-        cancelLabel="Keep practicing"
+        message={
+          mode === "test"
+            ? `Once you submit, your exam is final and your answers can no longer be changed. Your score, the correct answers, explanations, and the full exam review will be revealed.${
+                answeredCount < totalCount
+                  ? ` ${totalCount - answeredCount} unanswered question${
+                      totalCount - answeredCount === 1 ? "" : "s"
+                    } will be marked incorrect.`
+                  : ""
+              }`
+            : "Your progress so far will be saved, but you won't be able to resume these remaining questions."
+        }
+        confirmLabel={mode === "test" ? "Submit exam" : "End session"}
+        cancelLabel={mode === "test" ? "Keep working" : "Keep practicing"}
         onConfirm={endSession}
         onCancel={() => setShowEndConfirm(false)}
       />

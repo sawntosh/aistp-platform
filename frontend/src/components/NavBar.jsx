@@ -10,7 +10,7 @@ import UserMenu from "./UserMenu";
 
 const LINKS = [
   { href: "/study", label: "Study", icon: BookOpen },
-  { href: "/practice", label: "Test", icon: Target },
+  { href: "/practice", label: "Exam", icon: Target },
   { href: "/dashboard", label: "Analytics", icon: BarChart3 },
 ];
 
@@ -112,7 +112,7 @@ export default function NavBar({ compact = false }) {
           <div className="flex items-center gap-1 sm:gap-2">
             <div className="hidden items-center gap-1 sm:flex">
               <NavLink href="/study" label="Study" icon={BookOpen} isActive={router.pathname.startsWith("/study")} />
-              <NavLink href="/practice" label="Test" icon={Target} isActive={router.pathname === "/practice"} />
+              <NavLink href="/practice" label="Exam" icon={Target} isActive={router.pathname === "/practice"} />
               <NavLink href="/about" label="About" icon={Info} isActive={router.pathname === "/about"} />
             </div>
             <ThemeToggle />

@@ -11,7 +11,7 @@ export const SIDEBAR_WIDTH_CLASS = "sm:pl-60";
 
 const LINKS = [
   { href: "/study", label: "Study Mode", icon: BookOpen },
-  { href: "/practice", label: "Test Mode", icon: Target },
+  { href: "/practice", label: "Real Exam", icon: Target },
   { href: "/dashboard", label: "Analytics", icon: BarChart3 },
 ];
 

@@ -135,10 +135,10 @@ export default function DashboardPage() {
           />
           <StudyModeCard
             variant="test"
-            title="Test Mode"
-            description="Test your knowledge with realistic practice questions."
+            title="Real Exam"
+            description="Sit a full ISTQB-style exam. Score and review are revealed only after you submit."
             bullets={["Scoring & analytics included."]}
-            ctaLabel="Start Test"
+            ctaLabel="Start Exam"
             href="/practice"
           />
         </div>
@@ -223,7 +223,7 @@ export default function DashboardPage() {
               <CardContent>
                 <SectionHeader
                   title="Confidence insights"
-                  description="From Test Mode · a diagnostic signal, not part of your score"
+                  description="From the Real Exam · a diagnostic signal, not part of your score"
                   className="mb-4"
                 />
                 <ConfidenceInsights confidence={data?.confidence} />
