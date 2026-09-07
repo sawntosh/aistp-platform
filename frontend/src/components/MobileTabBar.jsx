@@ -6,7 +6,7 @@ import { cn } from "../lib/cn";
 
 const TABS = [
   { href: "/study", label: "Study", icon: BookOpen },
-  { href: "/practice", label: "Exam", icon: Target },
+  { href: "/practice", label: "Test", icon: Target },
   { href: "/dashboard", label: "Progress", icon: BarChart3 },
 ];
 
