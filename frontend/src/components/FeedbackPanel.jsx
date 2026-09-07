@@ -27,7 +27,7 @@ export default function FeedbackPanel({
       setExplanation(data.explanation);
       setIsExplanationFallback(Boolean(data.is_fallback));
     } catch {
-      setExplanationError("Couldn't load an explanation right now. Try again.");
+      setExplanationError("Couldn't load an explanation. Try again.");
     } finally {
       setIsLoadingExplanation(false);
     }
@@ -67,7 +67,7 @@ export default function FeedbackPanel({
           <div className="mt-2 rounded-md border border-border bg-surface p-4">
             {isExplanationFallback && (
               <p className="mb-1.5 text-caption font-medium text-warning">
-                AI tutor is temporarily unavailable — showing a basic explanation.
+                The AI tutor is unavailable right now. Here&apos;s a basic explanation.
               </p>
             )}
             <RichText text={explanation} />

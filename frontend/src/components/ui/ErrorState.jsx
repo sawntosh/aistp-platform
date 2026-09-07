@@ -3,8 +3,8 @@ import Button from "./Button";
 import EmptyState from "./EmptyState";
 
 export default function ErrorState({
-  title = "Something went wrong",
-  description = "We couldn't load this. Please try again.",
+  title = "Couldn't load this",
+  description = "Something went wrong. Try again.",
   onRetry,
   className = "",
 }) {

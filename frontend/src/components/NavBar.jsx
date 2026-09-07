@@ -14,7 +14,7 @@ const LINKS = [
   { href: "/dashboard", label: "Analytics", icon: BarChart3 },
 ];
 
-const LOCKED_TITLE = "Finish or end your practice session first";
+const LOCKED_TITLE = "Finish your current session first";
 
 function Logo({ disabled }) {
   return (

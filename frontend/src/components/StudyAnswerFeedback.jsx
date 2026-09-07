@@ -19,7 +19,7 @@ export default function StudyAnswerFeedback({ isCorrect, correctAnswerText, ques
       setExplanation(data.explanation);
       setIsExplanationFallback(Boolean(data.is_fallback));
     } catch {
-      setExplanationError("Couldn't load an explanation right now. Try again.");
+      setExplanationError("Couldn't load an explanation. Try again.");
     } finally {
       setIsLoadingExplanation(false);
     }
@@ -53,7 +53,7 @@ export default function StudyAnswerFeedback({ isCorrect, correctAnswerText, ques
             className="flex cursor-pointer items-center gap-1.5 text-body-sm font-medium text-primary hover:underline disabled:opacity-50"
           >
             <Lightbulb className="h-4 w-4" aria-hidden="true" />
-            {isLoadingExplanation ? "Asking AI tutor…" : "Why this matters"}
+            {isLoadingExplanation ? "Asking AI tutor…" : "Explain this answer"}
           </button>
         )}
         {explanationError && <p className="mt-2 text-body-sm text-error">{explanationError}</p>}
@@ -61,7 +61,7 @@ export default function StudyAnswerFeedback({ isCorrect, correctAnswerText, ques
           <div className="mt-2 rounded-md border border-border bg-surface p-4">
             {isExplanationFallback && (
               <p className="mb-1.5 text-caption font-medium text-warning">
-                AI tutor is temporarily unavailable — showing a basic explanation.
+                The AI tutor is unavailable right now. Here&apos;s a basic explanation.
               </p>
             )}
             <RichText text={explanation} />
@@ -76,7 +76,7 @@ export default function StudyAnswerFeedback({ isCorrect, correctAnswerText, ques
           </Button>
         )}
         <Button tone="study" onClick={onNext} className="flex-1">
-          {isLastQuestion ? "Finish" : "Next Question"}
+          {isLastQuestion ? "Finish" : "Next question"}
         </Button>
       </div>
     </div>
