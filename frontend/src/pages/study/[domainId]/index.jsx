@@ -37,7 +37,7 @@ export default function StudyDomainTopicsPage() {
     try {
       setData(await fetchStudyTopics(domainId));
     } catch {
-      setLoadError("Couldn't load this domain's topics right now.");
+      setLoadError("Couldn't load this domain's topics. Try again.");
     }
   }
 
@@ -74,11 +74,11 @@ export default function StudyDomainTopicsPage() {
               backLabel="Study"
               eyebrow={data.domain.name}
               title="Choose a topic"
-              description="Pick a topic to start learning."
+              description="Pick a topic to start."
             />
 
             {data.topics.length === 0 ? (
-              <EmptyState title="No topics yet" description="Topics for this domain will appear here once they're available." />
+              <EmptyState title="No topics yet" description="Topics for this domain will appear here once an admin adds them." />
             ) : (
               <ul className="space-y-3">
                 {data.topics.map((topic) => {

@@ -40,21 +40,21 @@ const MODES = [
     value: "practice",
     label: "Practice Mode",
     icon: Target,
-    description: "Instant feedback, AI explanations, and domain resources after every question.",
+    description: "Practice with feedback and explanations after each question.",
   },
   {
     value: "test",
     label: "Real Exam",
     icon: ClipboardCheck,
     description:
-      "A full ISTQB-style exam. Answer every question first — your score, the correct answers, and explanations are revealed only after you submit.",
+      "Answer every question, then submit to see your score and review the answers.",
   },
   {
     value: "mock",
     label: "ISTQB Mock Test",
     icon: GraduationCap,
     description:
-      "A 40-question CTFL Foundation mock exam drawn from the question bank — multiple choice only, ISTQB K-level mix, results and review after you submit.",
+      "Take a 40-question CTFL mock test using questions from the question bank.",
   },
 ];
 
@@ -233,7 +233,7 @@ export default function PracticePage() {
         console.warn("ISTQB Mock Test unavailable:", err.body.diagnostic);
       }
       setLoadError(
-        err?.body?.detail || "Couldn't load questions. Please try again."
+        err?.body?.detail || "Couldn't load the questions. Try again."
       );
     } finally {
       setIsLoadingQuestions(false);
@@ -447,18 +447,14 @@ export default function PracticePage() {
 
           {!user && (
             <Card className="border-test/25 bg-test-muted p-5">
-              <h2 className="text-body-sm font-semibold text-text-primary">What&apos;s in a practice session?</h2>
+              <h2 className="text-body-sm font-semibold text-text-primary">What&apos;s in a session?</h2>
               <ul className="mt-3 list-inside list-disc space-y-2 text-body-sm text-text-secondary">
-                <li>Real exam-style multiple choice questions across all 6 CTFL v4.0 knowledge domains.</li>
+                <li>Exam-style questions across all six CTFL domains.</li>
                 <li>
-                  Practice Mode gives instant feedback, AI explanations, and domain resource links after every
-                  question — the Real Exam holds all of that back until you submit, just like the real exam.
+                  Practice Mode gives feedback and explanations as you go. Real Exam and ISTQB Mock Test
+                  hold them until you submit.
                 </li>
-                <li>
-                  AI-generated explanations for why an answer is right or wrong, tied back to the specific
-                  concept being tested.
-                </li>
-                <li>Every attempt feeds your analytics dashboard, so you can see exactly which domains need more work.</li>
+                <li>Your results feed a dashboard that shows which domains need work.</li>
               </ul>
             </Card>
           )}
@@ -599,7 +595,7 @@ export default function PracticePage() {
                 <span className="font-semibold text-text-primary">{sessionLength} questions</span> from{" "}
                 <span className="font-semibold text-text-primary">
                   {isMock
-                    ? "all domains · multiple choice · ISTQB K-level mix"
+                    ? "all domains, multiple choice"
                     : mode === "test"
                       ? "all domains, all question types"
                       : selectedDomainIds.length === 0
@@ -867,11 +863,7 @@ export default function PracticePage() {
           </span>
           {isLastPage ? (
             <Button tone="test" onClick={requestFinish}>
-              {isMock
-                ? "Review & submit mock test"
-                : mode === "test"
-                  ? "Review & submit exam"
-                  : "Finish session"}
+              {isMock ? "Submit mock test" : mode === "test" ? "Submit exam" : "Finish session"}
             </Button>
           ) : (
             <Button tone="test" onClick={() => setCurrentPage((p) => Math.min(pageCount - 1, p + 1))}>
@@ -885,14 +877,14 @@ export default function PracticePage() {
         open={showEndConfirm}
         title={
           isExamLike
-            ? `Are you sure you want to submit your ${isMock ? "mock test" : "exam"}?`
+            ? `Submit your ${isMock ? "mock test" : "exam"}?`
             : allAnswered
               ? "Finish this session?"
               : `${totalCount - answeredCount} question${totalCount - answeredCount === 1 ? "" : "s"} still unanswered`
         }
         message={
           isExamLike
-            ? `Once you submit, your ${isMock ? "mock test" : "exam"} is final and your answers can no longer be changed. Your score, the correct answers, explanations, and the full review will be revealed.${
+            ? `You can't change your answers after this. You'll get your score and a full review.${
                 answeredCount < totalCount
                   ? ` ${totalCount - answeredCount} unanswered question${
                       totalCount - answeredCount === 1 ? "" : "s"

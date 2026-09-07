@@ -126,7 +126,7 @@ export default function StudyTopicPage() {
         correctAnswerText: describeCorrectAnswer(currentQuestion, data),
       });
     } catch {
-      setAnswerError("Couldn't check your answer right now. Please try again.");
+      setAnswerError("Couldn't check your answer. Try again.");
     } finally {
       setIsChecking(false);
     }
@@ -187,8 +187,8 @@ export default function StudyTopicPage() {
         {pageState === "error" && (
           <ErrorState
             className="mt-8"
-            title="Something went wrong"
-            description="We couldn't load this topic."
+            title="Couldn't load this topic"
+            description="Something went wrong. Try again."
             onRetry={loadTopic}
           />
         )}
