@@ -2,9 +2,9 @@
 Authentication API tests -- FR-01.
 
 Registration validation (username charset, password policy, Gmail rule,
-duplicates, boundaries), email verification (block-until-verified,
-verify, resend), login outcomes, per-(username, IP) lockout, and JWT
-handling on the protected /me/ endpoint.
+duplicates, boundaries), the (dormant) email verify/resend endpoints,
+login outcomes, per-(username, IP) lockout, and JWT handling on the
+protected /me/ endpoint.
 """
 from django.core import mail
 from django.core.cache import cache
@@ -32,14 +32,14 @@ class RegistrationValidationTests(APITestCase):
     def _register(self, **overrides):
         return self.client.post("/api/auth/register/", {**VALID, **overrides})
 
-    def test_valid_registration_creates_unverified_user_and_sends_email(self):
+    def test_valid_registration_creates_active_user_and_sends_no_email(self):
         resp = self._register()
         self.assertEqual(resp.status_code, 201)
         user = User.objects.get(username="alice")
-        self.assertFalse(user.email_verified)
+        # Email verification is not required to sign up.
+        self.assertTrue(user.email_verified)
         self.assertEqual(user.role, User.Role.STUDENT)
-        self.assertEqual(len(mail.outbox), 1)
-        self.assertIn("verify-email?token=", mail.outbox[0].body)
+        self.assertEqual(len(mail.outbox), 0)
         self.assertNotIn("password", resp.data)
 
     def test_password_is_hashed(self):
@@ -191,8 +191,11 @@ class EmailVerificationTests(APITestCase):
     def setUp(self):
         cache.clear()
         mail.outbox = []
-        self.client.post("/api/auth/register/", {**VALID})
-        self.user = User.objects.get(username="alice")
+        # Sign-up auto-verifies now, so create an explicitly-unverified
+        # user to exercise the (dormant) verify / resend endpoints.
+        self.user = User.objects.create_user(
+            username="alice", email=VALID["email"], password=VALID["password"]
+        )
 
     def test_valid_token_verifies_and_enables_login(self):
         token = make_token(self.user)
@@ -258,12 +261,14 @@ class LoginGateTests(APITestCase):
         self.assertIn("access", resp.data)
         self.assertIn("refresh", resp.data)
 
-    def test_unverified_user_with_correct_password_is_blocked_with_resend_hint(self):
+    def test_unverified_user_with_correct_password_still_gets_tokens(self):
+        # Email verification is not required to log in.
         resp = self.client.post(
             "/api/auth/login/", {"username": "dan", "password": "Str0ngPass!23"}
         )
-        self.assertEqual(resp.status_code, 403)
-        self.assertTrue(resp.data["can_resend"])
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("access", resp.data)
+        self.assertIn("refresh", resp.data)
 
     def test_wrong_password_is_rejected(self):
         resp = self.client.post(
