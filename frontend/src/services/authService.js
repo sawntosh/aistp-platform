@@ -35,6 +35,22 @@ export async function resendVerification(email) {
   });
 }
 
+// Always resolves 200 with a generic message -- the backend never reveals
+// whether the address is registered.
+export async function requestPasswordReset(email) {
+  return apiFetch("/auth/password-reset/", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+}
+
+export async function confirmPasswordReset({ token, password, confirmPassword }) {
+  return apiFetch("/auth/password-reset/confirm/", {
+    method: "POST",
+    body: JSON.stringify({ token, password, confirm_password: confirmPassword }),
+  });
+}
+
 export async function login({ username, password }) {
   const data = await apiFetch("/auth/login/", {
     method: "POST",
