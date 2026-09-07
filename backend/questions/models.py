@@ -134,8 +134,16 @@ class PracticeSession(models.Model):
         PRACTICE = "practice", "Practice"
         # Test: exam simulation -- AnswerSubmitView withholds correctness
         # and the correct answer until the session is finished, when
-        # SessionReviewView reveals everything at once.
+        # SessionReviewView reveals everything at once. Collects a 1-5
+        # confidence rating per answer and feeds PerformanceAnalytics.
         TEST = "test", "Test"
+        # Mock: the ISTQB CTFL Foundation mock exam -- 40 MCQ questions
+        # drawn from the existing bank to the official K1/K2/K3 split
+        # (see questions.views._pick_istqb_mock_question_ids). Withholds
+        # correctness like TEST, but collects no confidence rating and is
+        # self-contained: mock attempts are NOT rolled into the analytics
+        # dashboard (matches the "analytics = Test Mode only" design).
+        MOCK = "mock", "ISTQB Mock Test"
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="sessions")
     mode = models.CharField(max_length=10, choices=Mode.choices, default=Mode.PRACTICE)

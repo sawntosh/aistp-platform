@@ -210,17 +210,29 @@ export default function QuestionCard({
   // Test Mode: an answer alone isn't enough -- the learner must also
   // rate their confidence before the answer can be submitted.
   const canSubmit = answerReady && (!confidenceRequired || confidence != null);
+  // Exam-style modes keep the question card free of anything that isn't
+  // the question itself -- a real ISTQB exam never telegraphs difficulty,
+  // and the ISTQB Mock Test additionally hides which domain a question
+  // belongs to while it's being answered.
+  const isMock = mode === "mock";
+  const isExam = mode === "test" || isMock;
 
   return (
     <Card className="p-6">
-      <div className="mb-4 flex items-center justify-between">
-        <span className={cn("inline-block rounded-full px-3 py-1 text-caption font-medium", domainColor.bg, domainColor.text)}>
-          {question.domain?.name}
-        </span>
-        <Badge tone={DIFFICULTY_TONE[question.difficulty] ?? "default"} className="uppercase">
-          {question.difficulty}
-        </Badge>
-      </div>
+      {/* ISTQB Mock Test hides both the domain and the difficulty while a
+          question is being answered, leaving just the question itself. */}
+      {!isMock && (
+        <div className="mb-4 flex items-center justify-between">
+          <span className={cn("inline-block rounded-full px-3 py-1 text-caption font-medium", domainColor.bg, domainColor.text)}>
+            {question.domain?.name}
+          </span>
+          {!isExam && (
+            <Badge tone={DIFFICULTY_TONE[question.difficulty] ?? "default"} className="uppercase">
+              {question.difficulty}
+            </Badge>
+          )}
+        </div>
+      )}
 
       <p className="mb-6 text-h3 font-normal text-text-primary">{question.text}</p>
 
@@ -257,15 +269,16 @@ export default function QuestionCard({
             </Button>
           )}
           <Button tone="test" onClick={onSubmit} disabled={!canSubmit} isLoading={isSubmitting} className="flex-1">
-            {isSubmitting ? "Submitting…" : "Submit answer"}
+            {isExam ? (isSubmitting ? "Saving…" : "Save answer") : isSubmitting ? "Submitting…" : "Submit answer"}
           </Button>
         </div>
       )}
 
-      {isAnswered && mode === "test" && (
+      {isAnswered && isExam && (
         <div className="mt-5">
           <p className="rounded-md bg-surface-muted px-4 py-2 text-body-sm text-text-secondary">
-            Answer recorded — you&apos;ll see the correct answer and explanation after you finish the test.
+            Answer saved. The correct answer and explanation are revealed only after you submit the
+            exam.
           </p>
           {confidence != null && (
             <p className="mt-2 text-caption text-text-muted">
@@ -277,7 +290,7 @@ export default function QuestionCard({
           )}
           {!hideAdvance && (
             <Button variant="secondary" onClick={onNext} className="mt-3 w-full">
-              {isLastQuestion ? "Finish test" : "Next question"}
+              {isLastQuestion ? "Review & submit exam" : "Next question"}
             </Button>
           )}
         </div>

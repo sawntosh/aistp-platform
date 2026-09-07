@@ -14,7 +14,6 @@ class ExplainRequestSerializer(serializers.Serializer):
 
 class AIExplanationSerializer(serializers.ModelSerializer):
     explanation = serializers.SerializerMethodField()
-    # Always False here: a persisted AIExplanation is only ever created from
     # a real Groq response (see ExplainView) -- the fallback path never
     # reaches this serializer. Included so the response contract is stable.
     is_fallback = serializers.SerializerMethodField()
