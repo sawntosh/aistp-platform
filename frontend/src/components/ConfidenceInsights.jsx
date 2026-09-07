@@ -10,7 +10,7 @@ export default function ConfidenceInsights({ confidence }) {
     return (
       <EmptyState
         title="No confidence data yet"
-        description="Finish a Test Mode session — you'll rate how sure you are on each answer — to see this."
+        description="Finish a Test Mode session and rate your confidence on each answer to see this."
       />
     );
   }

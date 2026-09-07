@@ -75,7 +75,7 @@ export default function DashboardPage() {
     setLoadError("");
     fetchDashboardAnalytics()
       .then(setData)
-      .catch(() => setLoadError("Couldn't load your analytics right now. Please try again."))
+      .catch(() => setLoadError("Couldn't load your analytics. Try again."))
       .finally(() => setIsLoading(false));
   }
 
@@ -121,24 +121,24 @@ export default function DashboardPage() {
           <h1 className="text-h1 text-text-primary">
             {greeting()}, {user.username}
           </h1>
-          <p className="mt-1 text-body text-text-muted">Ready to continue your CTFL preparation?</p>
+          <p className="mt-1 text-body text-text-muted">Here&apos;s how your CTFL prep is going.</p>
         </div>
 
         <div className="mb-10 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <StudyModeCard
             variant="study"
             title="Study Mode"
-            description="Learn concepts and reinforce them with related questions."
+            description="Read a topic, then answer a few questions on it."
             bullets={["No scores. No pressure."]}
-            ctaLabel="Start Studying"
+            ctaLabel="Start studying"
             href="/study"
           />
           <StudyModeCard
             variant="test"
             title="Test Mode"
-            description="Test your knowledge with realistic practice questions."
-            bullets={["Scoring & analytics included."]}
-            ctaLabel="Start Test"
+            description="Answer exam-style questions and track your score."
+            bullets={["Scoring and analytics included."]}
+            ctaLabel="Start test"
             href="/practice"
           />
         </div>
@@ -223,7 +223,7 @@ export default function DashboardPage() {
               <CardContent>
                 <SectionHeader
                   title="Confidence insights"
-                  description="From Test Mode · a diagnostic signal, not part of your score"
+                  description="From Test Mode · for insight only, not part of your score"
                   className="mb-4"
                 />
                 <ConfidenceInsights confidence={data?.confidence} />

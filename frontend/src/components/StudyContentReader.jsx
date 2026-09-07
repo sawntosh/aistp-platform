@@ -24,7 +24,7 @@ export default function StudyContentReader({ domainName, topicTitle, topicPositi
 
       {onContinue && (
         <Button tone="study" size="lg" onClick={onContinue} className="mt-9">
-          {hasQuestions ? "Continue to Knowledge Check" : "Finish topic"}
+          {hasQuestions ? "Continue to knowledge check" : "Finish topic"}
           <ArrowRight className="h-4 w-4" aria-hidden="true" />
         </Button>
       )}

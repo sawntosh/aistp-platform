@@ -5,21 +5,18 @@ import { Card } from "../components/ui/Card";
 const VALUES = [
   {
     icon: Sparkles,
-    title: "AI-guided learning",
-    description:
-      "Every practice question is paired with an AI tutor that can explain the reasoning behind the correct answer in plain English.",
+    title: "Explanations on demand",
+    description: "Ask for a plain-English explanation on any question.",
   },
   {
     icon: BarChart3,
-    title: "Data-driven progress",
-    description:
-      "We track your accuracy across all 6 CTFL domains so you always know exactly where to focus your study time.",
+    title: "Progress tracking",
+    description: "Track your accuracy across all six CTFL domains and see where to focus.",
   },
   {
     icon: Target,
-    title: "Exam-realistic practice",
-    description:
-      "Questions are modeled on the real ISTQB CTFL exam format, so what you practice is what you'll see on test day.",
+    title: "Exam-style questions",
+    description: "Questions follow the ISTQB CTFL exam format.",
   },
 ];
 
@@ -35,15 +32,14 @@ export default function AboutPage() {
             The AI Assisted Software Testing Practice Platform
           </h1>
           <p className="mt-4 text-body-lg text-text-muted">
-            AISTP helps aspiring software testers prepare for the ISTQB Certified Tester Foundation Level (CTFL)
-            exam through realistic practice questions, instant AI-generated explanations, and detailed progress
-            analytics. Our goal is to make exam prep focused, personalized, and a little less stressful.
+            AISTP helps you prepare for the ISTQB Certified Tester Foundation Level (CTFL) exam with practice
+            questions, on-demand explanations, and progress tracking by domain.
           </p>
         </div>
       </section>
 
       <section className="mx-auto max-w-5xl px-4 py-16">
-        <h2 className="text-center text-h1 text-text-primary">What we&apos;re built on</h2>
+        <h2 className="text-center text-h1 text-text-primary">What you get</h2>
         <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-3">
           {VALUES.map((value) => {
             const Icon = value.icon;
@@ -64,10 +60,8 @@ export default function AboutPage() {
         <Card className="bg-surface-muted p-8">
           <h2 className="text-h2 text-text-primary">Why AISTP?</h2>
           <p className="mt-3 text-body text-text-secondary">
-            Studying for a certification exam alone can be overwhelming, especially when you don&apos;t know why an
-            answer is wrong. AISTP pairs targeted practice with an AI tutor that explains each concept as you go,
-            and surfaces exactly which of the 6 CTFL domains need more attention, so every study session moves you
-            closer to passing.
+            Studying alone is hard, especially when you can&apos;t tell why an answer is wrong. AISTP pairs
+            practice with clear explanations and shows which CTFL domains need more attention.
           </p>
         </Card>
       </section>

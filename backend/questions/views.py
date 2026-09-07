@@ -44,6 +44,13 @@ from .serializers import (
 DEFAULT_SESSION_SIZE = 10
 MAX_SESSION_SIZE = 40
 
+# ISTQB CTFL Foundation mock exam: a full paper is 40 questions with the
+# official cognitive-level split below. The Mock Test mode draws these
+# from the EXISTING question bank (read-only) -- never generated or
+# hard-coded. Shorter self-tests scale the ratio proportionally.
+MOCK_EXAM_SIZE = 40
+CTFL_K_LEVEL_SPLIT = {"K1": 8, "K2": 24, "K3": 8}
+
 
 def _pick_stratified_question_ids(base_qs, count):
     """Choose `count` question ids from base_qs, spreading the draw
@@ -85,6 +92,110 @@ def _pick_stratified_question_ids(base_qs, count):
     return selected
 
 
+def _round_robin_by_domain(pairs, want):
+    """Pick up to `want` question ids from `pairs` -- a list of
+    (question_id, domain_id) -- cycling through domains so the pick is
+    spread across as many domains as possible before any one domain is
+    drawn from a second time. Each domain's ids are consumed in random
+    order."""
+    if want <= 0 or not pairs:
+        return []
+    buckets = {}
+    for question_id, domain_id in pairs:
+        buckets.setdefault(domain_id, []).append(question_id)
+    for ids in buckets.values():
+        random.shuffle(ids)
+    keys = list(buckets.keys())
+    random.shuffle(keys)
+
+    picked = []
+    for key in itertools.cycle(keys):
+        if len(picked) >= want or all(not buckets[k] for k in keys):
+            break
+        if buckets[key]:
+            picked.append(buckets[key].pop())
+    return picked
+
+
+def _pick_istqb_mock_question_ids(count):
+    """Select `count` question ids for an ISTQB CTFL mock exam, drawn
+    ONLY from the existing question bank (read-only -- nothing generated,
+    hard-coded, or duplicated).
+
+    Eligibility: is_active=True AND question_type='mcq'. The whole bank
+    is ISTQB CTFL v4.0 (see questions.models.Domain), so there is no
+    separate certification/syllabus field to filter on and none is
+    invented. The draw targets the official K1/K2/K3 cognitive-level
+    split (8/24/8 for a 40-question paper) scaled to `count`, taking
+    `cognitive_level` values exactly as stored -- never fabricating one.
+    A level that can't be filled is back-filled from the other levels
+    (and any untagged eligible MCQ). Within every level the pick is
+    spread across domains and randomised, so consecutive mock exams get
+    different, non-overlapping-by-luck question sets.
+
+    Returns (selected_ids, diagnostics). `selected_ids` can be shorter
+    than `count` when the bank simply doesn't hold enough eligible MCQ;
+    the caller decides whether that is a hard failure.
+    """
+    pool = list(
+        Question.objects.filter(
+            is_active=True, question_type=Question.QuestionType.MCQ
+        ).values_list("id", "cognitive_level", "domain_id")
+    )
+
+    by_level = {}
+    for question_id, level, domain_id in pool:
+        by_level.setdefault((level or "").upper(), []).append((question_id, domain_id))
+
+    available_by_level = {lvl: len(items) for lvl, items in sorted(by_level.items())}
+
+    # Scale the official 8/24/8 ratio to `count`, then hand any rounding
+    # drift to K2 (the dominant bucket) so K1/K3 stay near their share
+    # and the three targets still sum to exactly `count`.
+    targets = {
+        lvl: int(round(CTFL_K_LEVEL_SPLIT[lvl] / MOCK_EXAM_SIZE * count))
+        for lvl in CTFL_K_LEVEL_SPLIT
+    }
+    targets["K2"] = max(0, targets["K2"] + (count - sum(targets.values())))
+
+    selected = []
+    used = set()
+    shortfalls = {}
+    for lvl in ("K1", "K2", "K3"):
+        want = targets[lvl]
+        picked = _round_robin_by_domain(by_level.get(lvl, []), want)
+        selected.extend(picked)
+        used.update(picked)
+        if len(picked) < want:
+            shortfalls[lvl] = want - len(picked)
+
+    # Back-fill the remainder from every not-yet-used eligible MCQ,
+    # regardless of K-level (covers a short bucket and any untagged rows).
+    if len(selected) < count:
+        leftover = [
+            (question_id, domain_id)
+            for items in by_level.values()
+            for (question_id, domain_id) in items
+            if question_id not in used
+        ]
+        backfill = _round_robin_by_domain(leftover, count - len(selected))
+        selected.extend(backfill)
+
+    random.shuffle(selected)
+    selected = selected[:count]
+
+    diagnostics = {
+        "requested": count,
+        "eligible_mcq_total": len(pool),
+        "available_by_k_level": available_by_level,
+        "k_level_targets": targets,
+        "k_level_shortfalls": shortfalls,
+        "selected": len(selected),
+        "unique_ids": len(set(selected)),
+    }
+    return selected, diagnostics
+
+
 class QuestionListView(APIView):
     """FR-02: serve a session's worth of active questions and create the
     PracticeSession that subsequent AnswerSubmitView calls attach to.
@@ -113,7 +224,54 @@ class QuestionListView(APIView):
 
         mode = request.query_params.get("mode", PracticeSession.Mode.PRACTICE)
         if mode not in PracticeSession.Mode.values:
-            return Response({"detail": "mode must be 'practice' or 'test'."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "mode must be 'practice', 'test', or 'mock'."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # ISTQB Mock Test: a self-contained MCQ exam built to the official
+        # CTFL cognitive-level split from the EXISTING bank. It ignores any
+        # ?domains= filter (always all domains) and is validated before a
+        # session is created, so an under-stocked bank never yields a
+        # half-empty "40-question" paper.
+        if mode == PracticeSession.Mode.MOCK:
+            selected_ids, mock_diagnostic = _pick_istqb_mock_question_ids(count)
+            if not selected_ids:
+                return Response(
+                    {
+                        "detail": (
+                            "Unable to create an ISTQB Mock Test: the question bank "
+                            "has no active multiple-choice questions."
+                        ),
+                        "diagnostic": mock_diagnostic,
+                    },
+                    status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                )
+            if len(selected_ids) < count and count >= MOCK_EXAM_SIZE:
+                return Response(
+                    {
+                        "detail": (
+                            "Unable to create a complete ISTQB Mock Test because the "
+                            "question bank currently contains fewer than 40 eligible "
+                            "(active, multiple-choice) questions."
+                        ),
+                        "diagnostic": mock_diagnostic,
+                    },
+                    status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                )
+            mock_questions = list(
+                Question.objects.filter(id__in=selected_ids)
+                .select_related("domain")
+                .prefetch_related("options", "blank_answers", "matching_pairs")
+            )
+            random.shuffle(mock_questions)
+            session = PracticeSession.objects.create(
+                user=request.user, question_count=len(mock_questions), mode=mode
+            )
+            data = QuestionPublicSerializer(mock_questions, many=True).data
+            return Response(
+                {"session_id": session.id, "mode": session.mode, "questions": data}
+            )
 
         questions_qs = Question.objects.filter(is_active=True)
 
@@ -269,13 +427,16 @@ class AnswerSubmitView(APIView):
         if session.mode == PracticeSession.Mode.TEST:
             # Only Test Mode moves the learner's tracked performance
             # analytics (FR-05/FR-07). Practice Mode is low-stakes
-            # rehearsal and is deliberately kept out of the per-domain
-            # accuracy aggregates.
+            # rehearsal, and the ISTQB Mock Test is a self-contained exam
+            # -- both are deliberately kept out of the per-domain accuracy
+            # aggregates.
             record_attempt(request.user, question.domain, is_correct)
 
-            # Exam simulation: don't leak correctness or the answer key via
-            # the network response -- SessionReviewView reveals everything
-            # once the whole session is finished.
+        if session.mode in (PracticeSession.Mode.TEST, PracticeSession.Mode.MOCK):
+            # Exam simulation (Real Exam and ISTQB Mock Test): don't leak
+            # correctness or the answer key via the network response --
+            # SessionReviewView reveals everything once the whole session
+            # is finished.
             response_payload = {"question_type": qtype, "recorded": True}
         else:
             response_payload = {"is_correct": is_correct, "question_type": qtype, **build_reveal_payload(question)}

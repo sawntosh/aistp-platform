@@ -28,7 +28,7 @@ export default function StudyHomePage() {
     try {
       setDomains(await fetchStudyDomains());
     } catch {
-      setLoadError("Couldn't load Study Mode right now.");
+      setLoadError("Couldn't load Study Mode. Try again.");
     }
   }
 
@@ -45,7 +45,7 @@ export default function StudyHomePage() {
         <PageHeader
           eyebrow="Study Mode"
           title="What would you like to study?"
-          description="Choose a CTFL domain to start learning. No scores, no pressure — just concepts and practice questions."
+          description="Pick a CTFL domain to start. No scores — just concepts and practice questions."
         />
 
         {domains === null && !loadError && (
@@ -59,7 +59,7 @@ export default function StudyHomePage() {
         {loadError && <ErrorState description={loadError} onRetry={loadDomains} />}
 
         {domains && domains.length === 0 && (
-          <EmptyState icon={BookOpen} title="No study domains yet" description="Study content will appear here once your course content is available." />
+          <EmptyState icon={BookOpen} title="No study domains yet" description="Domains will appear here once an admin adds study content." />
         )}
 
         {domains && domains.length > 0 && (
