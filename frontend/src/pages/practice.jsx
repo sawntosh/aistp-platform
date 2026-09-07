@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/router";
-import { AlertTriangle, Brain, Check, ClipboardCheck, FolderKanban, Lightbulb, Puzzle, RefreshCw, Search, Sliders, Target, Wrench } from "lucide-react";
+import { AlertTriangle, Brain, Check, ClipboardCheck, FolderKanban, GraduationCap, Lightbulb, Puzzle, RefreshCw, Search, Sliders, Target, Wrench } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { usePracticeSession } from "../context/PracticeSessionContext";
 import {
@@ -49,11 +49,22 @@ const MODES = [
     description:
       "A full ISTQB-style exam. Answer every question first — your score, the correct answers, and explanations are revealed only after you submit.",
   },
+  {
+    value: "mock",
+    label: "ISTQB Mock Test",
+    icon: GraduationCap,
+    description:
+      "A 40-question CTFL Foundation mock exam drawn from the question bank — multiple choice only, ISTQB K-level mix, results and review after you submit.",
+  },
 ];
 
 // ISTQB CTFL Foundation Level standard pass mark. Presentation only — it
 // does not change how the session is scored on the backend.
 const EXAM_PASS_PERCENT = 65;
+
+// The ISTQB Mock Test is a fixed-format 40-question paper by default; the
+// length picker still lets a learner run a shorter self-test.
+const MOCK_TEST_LENGTH = 40;
 
 function OptionTile({ isSelected, onClick, children, className = "" }) {
   return (
@@ -159,6 +170,14 @@ export default function PracticePage() {
   }, [sessionStarted, isSessionComplete, setSessionLocked]);
   useEffect(() => () => setSessionLocked(false), [setSessionLocked]);
 
+  // "mock" is the ISTQB Mock Test. It shares the Real Exam behaviour
+  // (answers locked in as you go, correctness/explanations withheld until
+  // submission, then a full review) -- `isExamLike` -- but is its own
+  // mode: MCQ only, no domain filter, no confidence rating, and a fixed
+  // 40-question ISTQB paper by default.
+  const isMock = mode === "mock";
+  const isExamLike = mode === "test" || mode === "mock";
+
   function toggleDomain(domainId) {
     setSelectedDomainIds((prev) =>
       prev.includes(domainId) ? prev.filter((id) => id !== domainId) : [...prev, domainId]
@@ -187,9 +206,10 @@ export default function PracticePage() {
     setLoadError("");
     setIsLoadingQuestions(true);
     try {
-      // Real Exam is always drawn from every domain and every question
-      // type, like the real thing -- the domain filter is Practice only.
-      const requestDomainIds = mode === "test" ? [] : selectedDomainIds;
+      // Only Practice Mode uses the domain filter. Real Exam and the
+      // ISTQB Mock Test are always drawn from every domain, like the
+      // real thing.
+      const requestDomainIds = mode === "practice" ? selectedDomainIds : [];
       const data = await fetchPracticeQuestions(sessionLength, requestDomainIds, mode);
       setQuestions(data.questions);
       setTotalCount(data.questions.length);
@@ -204,8 +224,17 @@ export default function PracticePage() {
       setTestReview(null);
       setIsSessionComplete(false);
       setSessionStarted(true);
-    } catch {
-      setLoadError("Couldn't load practice questions. Please try again.");
+    } catch (err) {
+      // The ISTQB Mock Test returns a specific 422 + `diagnostic` when the
+      // bank can't supply a full 40-question paper -- surface that message
+      // verbatim, and log the diagnostic breakdown for development.
+      if (err?.body?.diagnostic) {
+        // eslint-disable-next-line no-console
+        console.warn("ISTQB Mock Test unavailable:", err.body.diagnostic);
+      }
+      setLoadError(
+        err?.body?.detail || "Couldn't load questions. Please try again."
+      );
     } finally {
       setIsLoadingQuestions(false);
     }
@@ -304,8 +333,10 @@ export default function PracticePage() {
     const question = questions.find((q) => q.id === questionId);
     if (!question) return;
     const confidence = confidenceById[questionId] ?? null;
-    // Test Mode: confidence is mandatory -- the QuestionCard also blocks
-    // the button, this is the belt-and-braces guard.
+    // Real Exam only: a 1-5 confidence rating is mandatory before an
+    // answer can be submitted (QuestionCard also blocks the button; this
+    // is the belt-and-braces guard). Practice Mode and the ISTQB Mock
+    // Test don't collect confidence.
     if (mode === "test" && confidence == null) {
       setLoadError("Select how confident you are before submitting.");
       return;
@@ -321,7 +352,11 @@ export default function PracticePage() {
         },
       });
       setSubmittedIds((prev) => new Set(prev).add(questionId));
-      if (mode !== "test") {
+      // Practice Mode only. Real Exam and the ISTQB Mock Test withhold
+      // correctness on submit (the backend returns nothing revealing), so
+      // resultsById stays empty and QuestionCard shows no right/wrong
+      // colouring until the post-submission review.
+      if (!isExamLike) {
         setResultsById((prev) => ({
           ...prev,
           [questionId]: {
@@ -351,7 +386,7 @@ export default function PracticePage() {
     try {
       const finishData = await finishSession(sessionId);
       setFinalScore(finishData.score);
-      if (mode === "test") {
+      if (isExamLike) {
         const review = await fetchSessionReview(sessionId);
         setTestReview(review);
       }
@@ -361,9 +396,10 @@ export default function PracticePage() {
   }
 
   function requestFinish() {
-    // Real Exam: submitting is a point of no return, so always route
-    // through the confirmation — even when every question is answered.
-    if (mode === "test") {
+    // Real Exam / ISTQB Mock Test: submitting is a point of no return, so
+    // always route through the confirmation — even when every question is
+    // answered.
+    if (isExamLike) {
       setShowEndConfirm(true);
       return;
     }
@@ -388,14 +424,18 @@ export default function PracticePage() {
         <div
           className={cn(
             "mx-auto grid grid-cols-1 gap-8",
-            mode === "test" ? "max-w-2xl" : "max-w-5xl lg:grid-cols-[1fr_320px] lg:items-start"
+            mode === "practice" ? "max-w-5xl lg:grid-cols-[1fr_320px] lg:items-start" : "max-w-2xl"
           )}
         >
         <div className="space-y-8">
           <div>
             {user && <p className="mb-1 text-body-sm font-medium text-test">Welcome back, {user.username}</p>}
             <h1 className="text-h1 text-text-primary">
-              {mode === "test" ? "Set up your exam" : "Start a practice session"}
+              {isMock
+                ? "Set up your ISTQB Mock Test"
+                : mode === "test"
+                  ? "Set up your exam"
+                  : "Start a practice session"}
             </h1>
             {!user && (
               <p className="mt-1 text-body-sm text-text-muted">
@@ -432,7 +472,19 @@ export default function PracticePage() {
                 const isSelected = mode === option.value;
                 const Icon = option.icon;
                 return (
-                  <OptionTile key={option.value} isSelected={isSelected} onClick={() => setMode(option.value)}>
+                  <OptionTile
+                    key={option.value}
+                    isSelected={isSelected}
+                    onClick={() => {
+                      setMode(option.value);
+                      // The ISTQB Mock Test defaults to a full 40-question
+                      // paper; the length picker can still shorten it.
+                      if (option.value === "mock") {
+                        setIsCustomLength(false);
+                        setSessionLength(MOCK_TEST_LENGTH);
+                      }
+                    }}
+                  >
                     <span className="flex items-center gap-2">
                       <Icon className={cn("h-4 w-4", isSelected ? "text-test" : "text-text-muted")} aria-hidden="true" />
                       <span className={cn("text-body-sm font-semibold", isSelected ? "text-test" : "text-text-primary")}>
@@ -446,7 +498,7 @@ export default function PracticePage() {
             </div>
           </div>
 
-          {mode !== "test" && (
+          {mode === "practice" && (
           <div>
             <h2 className="mb-1 text-label text-text-secondary">Filter by domain</h2>
             <p className="mb-3 text-caption text-text-muted">Optional — leave all unselected to practice every domain.</p>
@@ -540,14 +592,19 @@ export default function PracticePage() {
                 <ClipboardCheck className="h-4 w-4" aria-hidden="true" />
               </span>
               <span>
-                <span className="font-semibold text-text-primary">{mode === "practice" ? "Practice Mode" : "Real Exam"}</span> ·{" "}
+                <span className="font-semibold text-text-primary">
+                  {mode === "practice" ? "Practice Mode" : isMock ? "ISTQB Mock Test" : "Real Exam"}
+                </span>{" "}
+                ·{" "}
                 <span className="font-semibold text-text-primary">{sessionLength} questions</span> from{" "}
                 <span className="font-semibold text-text-primary">
-                  {mode === "test"
-                    ? "all domains, all question types"
-                    : selectedDomainIds.length === 0
-                      ? "all domains"
-                      : `${selectedDomainIds.length} domain${selectedDomainIds.length > 1 ? "s" : ""}`}
+                  {isMock
+                    ? "all domains · multiple choice · ISTQB K-level mix"
+                    : mode === "test"
+                      ? "all domains, all question types"
+                      : selectedDomainIds.length === 0
+                        ? "all domains"
+                        : `${selectedDomainIds.length} domain${selectedDomainIds.length > 1 ? "s" : ""}`}
                 </span>
               </span>
             </div>
@@ -558,13 +615,15 @@ export default function PracticePage() {
               ? "Loading questions…"
               : !user
                 ? "Log in to start"
-                : mode === "test"
-                  ? "Start exam"
-                  : "Start session"}
+                : isMock
+                  ? "Start mock test"
+                  : mode === "test"
+                    ? "Start exam"
+                    : "Start session"}
           </Button>
         </div>
 
-        {mode !== "test" && (
+        {mode === "practice" && (
           <WeakestDomainsPanel
             status={analyticsStatus}
             domains={weakestDomains}
@@ -578,17 +637,18 @@ export default function PracticePage() {
   }
 
   if (isSessionComplete) {
-    const isExam = mode === "test";
+    const isExam = isExamLike;
     const scoreValue = finalScore ?? correctCount;
     const scorePercent = totalCount ? Math.round((scoreValue / totalCount) * 100) : 0;
     const scoreTone = scorePercent >= 70 ? "text-success" : scorePercent >= 40 ? "text-warning" : "text-error";
     const examPassed = scorePercent >= EXAM_PASS_PERCENT;
+    const resultsTitle = isMock ? "ISTQB Mock Test results" : isExam ? "Exam results" : "Session complete";
 
     return (
       <div className="min-h-[calc(100vh-57px)] sm:min-h-screen bg-background px-4 py-10 sm:px-6">
         <div className="mx-auto max-w-2xl space-y-6">
           <Card className="p-8 text-center animate-pop">
-            <h1 className="mb-2 text-h1 text-text-primary">{isExam ? "Exam results" : "Session complete"}</h1>
+            <h1 className="mb-2 text-h1 text-text-primary">{resultsTitle}</h1>
             {isExam && (
               <p
                 className={cn(
@@ -607,13 +667,13 @@ export default function PracticePage() {
               {isExam && ` · ${EXAM_PASS_PERCENT}% required to pass (ISTQB CTFL standard)`}
             </p>
             <Button tone="test" onClick={backToSetup} className="w-full">
-              {isExam ? "Start another exam" : "Start another session"}
+              {isMock ? "Start another mock test" : isExam ? "Start another exam" : "Start another session"}
             </Button>
           </Card>
 
           {isExam && testReview && (
             <div className="space-y-4">
-              <h2 className="text-h2 text-text-primary">Exam review</h2>
+              <h2 className="text-h2 text-text-primary">{isMock ? "Mock test review" : "Exam review"}</h2>
               {testReview.results.map((item, index) => {
                 const domainColor = getDomainColor(item.domain?.name);
                 return (
@@ -683,11 +743,13 @@ export default function PracticePage() {
   return (
     <div className="min-h-[calc(100vh-57px)] sm:min-h-screen bg-background px-4 py-10 sm:px-6">
       <div className="mx-auto max-w-2xl">
-        {mode === "test" ? (
+        {isExamLike ? (
           <div className="mb-4 rounded-lg border border-test/20 bg-test-muted/40 px-5 py-3">
             <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
               <div>
-                <p className="text-caption font-semibold uppercase tracking-wide text-test">Real Exam</p>
+                <p className="text-caption font-semibold uppercase tracking-wide text-test">
+                  {isMock ? "ISTQB Mock Test" : "Real Exam"}
+                </p>
                 <p className="text-body-sm font-medium text-text-primary">
                   Question {pageStart + 1}–{Math.min(pageStart + PER_PAGE, questions.length)} of {totalCount}
                 </p>
@@ -701,7 +763,7 @@ export default function PracticePage() {
                   onClick={() => setShowEndConfirm(true)}
                   className="cursor-pointer rounded-md border border-test/40 px-3 py-1 text-caption font-semibold text-test transition-colors hover:bg-test hover:text-white"
                 >
-                  Submit exam
+                  {isMock ? "Submit mock test" : "Submit exam"}
                 </button>
               </div>
             </div>
@@ -805,7 +867,11 @@ export default function PracticePage() {
           </span>
           {isLastPage ? (
             <Button tone="test" onClick={requestFinish}>
-              {mode === "test" ? "Review & submit exam" : "Finish session"}
+              {isMock
+                ? "Review & submit mock test"
+                : mode === "test"
+                  ? "Review & submit exam"
+                  : "Finish session"}
             </Button>
           ) : (
             <Button tone="test" onClick={() => setCurrentPage((p) => Math.min(pageCount - 1, p + 1))}>
@@ -818,15 +884,15 @@ export default function PracticePage() {
       <ConfirmModal
         open={showEndConfirm}
         title={
-          mode === "test"
-            ? "Are you sure you want to submit your exam?"
+          isExamLike
+            ? `Are you sure you want to submit your ${isMock ? "mock test" : "exam"}?`
             : allAnswered
               ? "Finish this session?"
               : `${totalCount - answeredCount} question${totalCount - answeredCount === 1 ? "" : "s"} still unanswered`
         }
         message={
-          mode === "test"
-            ? `Once you submit, your exam is final and your answers can no longer be changed. Your score, the correct answers, explanations, and the full exam review will be revealed.${
+          isExamLike
+            ? `Once you submit, your ${isMock ? "mock test" : "exam"} is final and your answers can no longer be changed. Your score, the correct answers, explanations, and the full review will be revealed.${
                 answeredCount < totalCount
                   ? ` ${totalCount - answeredCount} unanswered question${
                       totalCount - answeredCount === 1 ? "" : "s"
@@ -835,8 +901,8 @@ export default function PracticePage() {
               }`
             : "Your progress so far will be saved, but you won't be able to resume these remaining questions."
         }
-        confirmLabel={mode === "test" ? "Submit exam" : "End session"}
-        cancelLabel={mode === "test" ? "Keep working" : "Keep practicing"}
+        confirmLabel={isExamLike ? `Submit ${isMock ? "mock test" : "exam"}` : "End session"}
+        cancelLabel={isExamLike ? "Keep working" : "Keep practicing"}
         onConfirm={endSession}
         onCancel={() => setShowEndConfirm(false)}
       />

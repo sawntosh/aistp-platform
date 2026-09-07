@@ -210,22 +210,29 @@ export default function QuestionCard({
   // Test Mode: an answer alone isn't enough -- the learner must also
   // rate their confidence before the answer can be submitted.
   const canSubmit = answerReady && (!confidenceRequired || confidence != null);
-  // Real Exam: keep the question card free of anything that isn't the
-  // question itself -- a real ISTQB exam never telegraphs difficulty.
-  const isExam = mode === "test";
+  // Exam-style modes keep the question card free of anything that isn't
+  // the question itself -- a real ISTQB exam never telegraphs difficulty,
+  // and the ISTQB Mock Test additionally hides which domain a question
+  // belongs to while it's being answered.
+  const isMock = mode === "mock";
+  const isExam = mode === "test" || isMock;
 
   return (
     <Card className="p-6">
-      <div className="mb-4 flex items-center justify-between">
-        <span className={cn("inline-block rounded-full px-3 py-1 text-caption font-medium", domainColor.bg, domainColor.text)}>
-          {question.domain?.name}
-        </span>
-        {!isExam && (
-          <Badge tone={DIFFICULTY_TONE[question.difficulty] ?? "default"} className="uppercase">
-            {question.difficulty}
-          </Badge>
-        )}
-      </div>
+      {/* ISTQB Mock Test hides both the domain and the difficulty while a
+          question is being answered, leaving just the question itself. */}
+      {!isMock && (
+        <div className="mb-4 flex items-center justify-between">
+          <span className={cn("inline-block rounded-full px-3 py-1 text-caption font-medium", domainColor.bg, domainColor.text)}>
+            {question.domain?.name}
+          </span>
+          {!isExam && (
+            <Badge tone={DIFFICULTY_TONE[question.difficulty] ?? "default"} className="uppercase">
+              {question.difficulty}
+            </Badge>
+          )}
+        </div>
+      )}
 
       <p className="mb-6 text-h3 font-normal text-text-primary">{question.text}</p>
 
