@@ -1,10 +1,12 @@
 """
 accounts/views.py -- FR-01: Registration & Authentication
 
-Register hashes the password (bcrypt hasher) and mails a verification
-link. Login issues a JWT via SimpleJWT, but only once the email is
-verified, and is protected by a per-(username, IP) lockout on top of the
-scoped rate throttle.
+Register hashes the password (bcrypt hasher) and activates the account
+immediately -- email verification is not required to sign up or log in.
+The verify-email / resend endpoints still exist (dormant) so the gate can
+be switched back on later. Login issues a JWT via SimpleJWT and is
+protected by a per-(username, IP) lockout on top of the scoped rate
+throttle.
 """
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
@@ -46,8 +48,8 @@ def _locked_message(ident):
 
 
 class RegisterView(generics.CreateAPIView):
-    """FR-01: create a new student account and mail a verification link.
-    Issues no tokens -- the client verifies, then logs in separately.
+    """FR-01: create a new student account, active immediately. Issues no
+    tokens -- the client logs in separately.
 
     Rate-limited (throttle_scope="register") so the open, unauthenticated
     endpoint can't be used to mass-create accounts / fill the users table.
@@ -58,17 +60,20 @@ class RegisterView(generics.CreateAPIView):
     serializer_class = RegisterSerializer
 
     def perform_create(self, serializer):
+        # Email verification is not required to sign up: mark the account
+        # verified so nothing downstream gates on it. The verify-email
+        # flow still exists (dormant) if this is switched back on.
         user = serializer.save()
-        send_verification_email(user)
+        user.email_verified = True
+        user.save(update_fields=["email_verified"])
 
 
 class LoginView(TokenObtainPairView):
     """Rate-limited (throttle_scope="login") + per-(username, IP) lockout.
 
-    - locked pair          -> 423 Locked
-    - bad credentials      -> 401 (counts toward the lockout)
-    - correct but unverified-> 403 with {"can_resend": true} (does NOT count)
-    - correct + verified   -> 200 with access/refresh
+    - locked pair     -> 423 Locked
+    - bad credentials -> 401 (counts toward the lockout)
+    - correct         -> 200 with access/refresh (no email-verification gate)
     """
     throttle_scope = "login"
 
@@ -93,19 +98,8 @@ class LoginView(TokenObtainPairView):
                 )
             raise
 
-        # Credentials are correct -- clear the failure counter regardless of
-        # verification state.
+        # Credentials are correct -- clear the failure counter.
         lockout.clear(ident)
-
-        user = serializer.user
-        if not user.email_verified:
-            return Response(
-                {
-                    "detail": "Please verify your email address before logging in.",
-                    "can_resend": True,
-                },
-                status=status.HTTP_403_FORBIDDEN,
-            )
 
         return Response(serializer.validated_data, status=status.HTTP_200_OK)
 

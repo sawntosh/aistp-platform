@@ -210,7 +210,8 @@ export default function RegisterPage() {
     setIsSubmitting(true);
     try {
       await register({ ...form, username, email });
-      setRegisteredEmail(email);
+      // No email verification step -- the account is active right away.
+      router.push("/login?registered=1");
     } catch (err) {
       showError(getErrorMessage(err, "Registration failed. Check your details and try again."));
     } finally {
