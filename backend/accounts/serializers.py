@@ -96,3 +96,24 @@ class EmailVerificationSerializer(serializers.Serializer):
 
 class ResendVerificationSerializer(serializers.Serializer):
     email = serializers.EmailField()
+
+
+class PasswordResetRequestSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+
+class PasswordResetConfirmSerializer(serializers.Serializer):
+    """Payload for PasswordResetConfirmView. The password policy
+    (AUTH_PASSWORD_VALIDATORS -- length, complexity, similarity) is checked
+    in the view instead, where the token has been resolved to a real user
+    for the similarity comparison."""
+    token = serializers.CharField()
+    password = serializers.CharField(write_only=True)
+    confirm_password = serializers.CharField(write_only=True)
+
+    def validate(self, attrs):
+        if attrs["password"] != attrs["confirm_password"]:
+            raise serializers.ValidationError(
+                {"confirm_password": "Passwords do not match."}
+            )
+        return attrs

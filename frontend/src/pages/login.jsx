@@ -64,8 +64,13 @@ export default function LoginPage() {
         showError(err.body.detail || "Please verify your email address before logging in.");
       } else if (err?.status === 423) {
         showError(err?.body?.detail || "Too many failed attempts. Try again shortly.");
+      } else if (err?.status === 401) {
+        showError("Invalid username or password.");
+      } else if (!err?.status) {
+        // fetch threw before a response -- server down, wrong API URL, or CORS.
+        showError("Couldn't reach the server. Check that the backend is running and try again.");
       } else {
-        showError(getErrorMessage(err, "Invalid username or password."));
+        showError(getErrorMessage(err, "Something went wrong. Please try again."));
       }
     } finally {
       setIsSubmitting(false);
@@ -123,7 +128,15 @@ export default function LoginPage() {
           </div>
 
           <div>
-            <Label htmlFor="password">Password</Label>
+            <div className="flex items-baseline justify-between">
+              <Label htmlFor="password">Password</Label>
+              <Link
+                href="/forgot-password"
+                className="text-caption font-medium text-primary hover:underline"
+              >
+                Forgot password?
+              </Link>
+            </div>
             <PasswordInput
               id="password"
               name="password"

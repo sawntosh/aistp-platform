@@ -12,7 +12,7 @@ from django.contrib.auth import get_user_model
 from django.test import override_settings
 from rest_framework.test import APITestCase
 
-from accounts.emails import make_token
+from accounts.emails import make_password_reset_token, make_token
 
 User = get_user_model()
 
@@ -355,3 +355,88 @@ class JwtProtectedEndpointTests(APITestCase):
         ).data["refresh"]
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {refresh}")
         self.assertEqual(self.client.get("/api/auth/me/").status_code, 401)
+
+
+class PasswordResetTests(APITestCase):
+    def setUp(self):
+        cache.clear()
+        mail.outbox = []
+        self.user = User.objects.create_user(
+            username="grace", email="grace@gmail.com", password="Str0ngPass!23"
+        )
+        self.user.email_verified = True
+        self.user.save(update_fields=["email_verified"])
+
+    def _request(self, email="grace@gmail.com"):
+        return self.client.post("/api/auth/password-reset/", {"email": email})
+
+    def _confirm(self, **body):
+        return self.client.post("/api/auth/password-reset/confirm/", body)
+
+    def test_request_for_known_email_sends_a_reset_link(self):
+        resp = self._request()
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn("reset-password?token=", mail.outbox[0].body)
+
+    def test_request_for_unknown_email_still_returns_200_and_sends_nothing(self):
+        resp = self._request("nobody@gmail.com")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_valid_token_sets_new_password_and_enables_login(self):
+        token = make_password_reset_token(self.user)
+        resp = self._confirm(
+            token=token, password="N3wStr0ng!pw", confirm_password="N3wStr0ng!pw"
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("N3wStr0ng!pw"))
+
+        login = self.client.post(
+            "/api/auth/login/", {"username": "grace", "password": "N3wStr0ng!pw"}
+        )
+        self.assertEqual(login.status_code, 200)
+        self.assertIn("access", login.data)
+
+    def test_token_is_single_use(self):
+        token = make_password_reset_token(self.user)
+        first = self._confirm(
+            token=token, password="N3wStr0ng!pw", confirm_password="N3wStr0ng!pw"
+        )
+        self.assertEqual(first.status_code, 200)
+        again = self._confirm(
+            token=token, password="An0ther!pw99", confirm_password="An0ther!pw99"
+        )
+        self.assertEqual(again.status_code, 400)
+
+    def test_mismatched_passwords_are_rejected(self):
+        token = make_password_reset_token(self.user)
+        resp = self._confirm(
+            token=token, password="N3wStr0ng!pw", confirm_password="different!9X"
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("confirm_password", resp.data)
+
+    def test_weak_new_password_is_rejected_by_policy(self):
+        token = make_password_reset_token(self.user)
+        resp = self._confirm(
+            token=token, password="alllowercase", confirm_password="alllowercase"
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("password", resp.data)
+
+    def test_garbage_token_is_rejected(self):
+        resp = self._confirm(
+            token="garbage", password="N3wStr0ng!pw", confirm_password="N3wStr0ng!pw"
+        )
+        self.assertEqual(resp.status_code, 400)
+
+    @override_settings(PASSWORD_RESET_MAX_AGE=-1)
+    def test_expired_token_is_rejected(self):
+        token = make_password_reset_token(self.user)
+        resp = self._confirm(
+            token=token, password="N3wStr0ng!pw", confirm_password="N3wStr0ng!pw"
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("expired", str(resp.data["detail"]).lower())

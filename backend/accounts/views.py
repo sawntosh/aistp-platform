@@ -7,17 +7,29 @@ verified, and is protected by a per-(username, IP) lockout on top of the
 scoped rate throttle.
 """
 from django.contrib.auth import get_user_model
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
 
 from . import lockout
-from .emails import VerificationTokenError, read_token, send_verification_email
+from .emails import (
+    PasswordResetTokenError,
+    VerificationTokenError,
+    password_fingerprint,
+    read_password_reset_token,
+    read_token,
+    send_password_reset_email,
+    send_verification_email,
+)
 from .serializers import (
     USERNAME_MIN_LENGTH,
     USERNAME_RE,
     EmailVerificationSerializer,
+    PasswordResetConfirmSerializer,
+    PasswordResetRequestSerializer,
     RegisterSerializer,
     ResendVerificationSerializer,
     UserSerializer,
@@ -141,6 +153,78 @@ class ResendVerificationView(APIView):
             send_verification_email(user)
         return Response(
             {"detail": "If that email needs verification, a new link is on its way."}
+        )
+
+
+class PasswordResetRequestView(APIView):
+    """POST {email} -> mails a reset link if that address maps to an
+    account. Always 200 (never reveals whether an email is registered).
+
+    Rate-limited under the "register" scope like the other open, unauth'd
+    account endpoints."""
+    permission_classes = [permissions.AllowAny]
+    throttle_scope = "register"
+
+    def post(self, request):
+        serializer = PasswordResetRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = User.objects.filter(
+            email__iexact=serializer.validated_data["email"]
+        ).first()
+        if user is not None:
+            send_password_reset_email(user)
+        return Response(
+            {
+                "detail": "If an account exists for that email, a password "
+                "reset link is on its way."
+            }
+        )
+
+
+class PasswordResetConfirmView(APIView):
+    """POST {token, password, confirm_password} from the emailed link ->
+    sets the new password. The token is single-use: it carries a
+    fingerprint of the old password hash, so once the password changes the
+    same link (and any older ones) stop working."""
+    permission_classes = [permissions.AllowAny]
+    throttle_scope = "register"
+
+    def post(self, request):
+        serializer = PasswordResetConfirmSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            uid, fingerprint = read_password_reset_token(
+                serializer.validated_data["token"]
+            )
+        except PasswordResetTokenError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        user = User.objects.filter(pk=uid).first()
+        if user is None or password_fingerprint(user) != fingerprint:
+            return Response(
+                {
+                    "detail": "This password reset link is invalid or has "
+                    "already been used."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        password = serializer.validated_data["password"]
+        try:
+            validate_password(password, user=user)
+        except DjangoValidationError as exc:
+            return Response(
+                {"password": list(exc.messages)}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        user.set_password(password)
+        user.save(update_fields=["password"])
+        # A successful reset also clears any standing login lockout for this
+        # user so they aren't locked out right after regaining access.
+        lockout.clear(lockout.identity(user.username, request))
+        return Response(
+            {"detail": "Your password has been reset. You can now log in."}
         )
 
 
