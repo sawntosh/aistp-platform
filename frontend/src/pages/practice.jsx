@@ -187,7 +187,10 @@ export default function PracticePage() {
     setLoadError("");
     setIsLoadingQuestions(true);
     try {
-      const data = await fetchPracticeQuestions(sessionLength, selectedDomainIds, mode);
+      // Real Exam is always drawn from every domain and every question
+      // type, like the real thing -- the domain filter is Practice only.
+      const requestDomainIds = mode === "test" ? [] : selectedDomainIds;
+      const data = await fetchPracticeQuestions(sessionLength, requestDomainIds, mode);
       setQuestions(data.questions);
       setTotalCount(data.questions.length);
       setCurrentPage(0);
@@ -382,7 +385,12 @@ export default function PracticePage() {
   if (!sessionStarted) {
     return (
       <div className="min-h-[calc(100vh-57px)] sm:min-h-screen bg-background px-4 py-10 sm:px-6">
-        <div className="mx-auto grid max-w-5xl grid-cols-1 gap-8 lg:grid-cols-[1fr_320px] lg:items-start">
+        <div
+          className={cn(
+            "mx-auto grid grid-cols-1 gap-8",
+            mode === "test" ? "max-w-2xl" : "max-w-5xl lg:grid-cols-[1fr_320px] lg:items-start"
+          )}
+        >
         <div className="space-y-8">
           <div>
             {user && <p className="mb-1 text-body-sm font-medium text-test">Welcome back, {user.username}</p>}
@@ -438,6 +446,7 @@ export default function PracticePage() {
             </div>
           </div>
 
+          {mode !== "test" && (
           <div>
             <h2 className="mb-1 text-label text-text-secondary">Filter by domain</h2>
             <p className="mb-3 text-caption text-text-muted">Optional — leave all unselected to practice every domain.</p>
@@ -470,6 +479,7 @@ export default function PracticePage() {
               })}
             </div>
           </div>
+          )}
 
           <div>
             <h2 className="mb-3 text-label text-text-secondary">Session length</h2>
@@ -533,9 +543,11 @@ export default function PracticePage() {
                 <span className="font-semibold text-text-primary">{mode === "practice" ? "Practice Mode" : "Real Exam"}</span> ·{" "}
                 <span className="font-semibold text-text-primary">{sessionLength} questions</span> from{" "}
                 <span className="font-semibold text-text-primary">
-                  {selectedDomainIds.length === 0
-                    ? "all domains"
-                    : `${selectedDomainIds.length} domain${selectedDomainIds.length > 1 ? "s" : ""}`}
+                  {mode === "test"
+                    ? "all domains, all question types"
+                    : selectedDomainIds.length === 0
+                      ? "all domains"
+                      : `${selectedDomainIds.length} domain${selectedDomainIds.length > 1 ? "s" : ""}`}
                 </span>
               </span>
             </div>
@@ -552,12 +564,14 @@ export default function PracticePage() {
           </Button>
         </div>
 
-        <WeakestDomainsPanel
-          status={analyticsStatus}
-          domains={weakestDomains}
-          selectedDomainIds={selectedDomainIds}
-          onToggleDomain={addDomainFilter}
-        />
+        {mode !== "test" && (
+          <WeakestDomainsPanel
+            status={analyticsStatus}
+            domains={weakestDomains}
+            selectedDomainIds={selectedDomainIds}
+            onToggleDomain={addDomainFilter}
+          />
+        )}
         </div>
       </div>
     );
