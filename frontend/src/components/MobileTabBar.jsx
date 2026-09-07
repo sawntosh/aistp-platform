@@ -26,7 +26,7 @@ export default function MobileTabBar() {
               key={href}
               href={isSessionActive ? router.pathname : href}
               aria-disabled={isSessionActive}
-              title={isSessionActive ? "Finish or end your practice session first" : undefined}
+              title={isSessionActive ? "Finish your current session first" : undefined}
               className={cn(
                 "flex min-w-[64px] flex-col items-center gap-1 rounded-md px-3 py-1.5 text-caption font-medium transition-colors",
                 isSessionActive

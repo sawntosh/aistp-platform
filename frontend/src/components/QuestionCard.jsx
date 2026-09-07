@@ -277,8 +277,7 @@ export default function QuestionCard({
       {isAnswered && isExam && (
         <div className="mt-5">
           <p className="rounded-md bg-surface-muted px-4 py-2 text-body-sm text-text-secondary">
-            Answer saved. The correct answer and explanation are revealed only after you submit the
-            exam.
+            Answer saved. You&apos;ll see the correct answer and explanation after you submit.
           </p>
           {confidence != null && (
             <p className="mt-2 text-caption text-text-muted">
@@ -290,7 +289,7 @@ export default function QuestionCard({
           )}
           {!hideAdvance && (
             <Button variant="secondary" onClick={onNext} className="mt-3 w-full">
-              {isLastQuestion ? "Review & submit exam" : "Next question"}
+              {isLastQuestion ? "Submit exam" : "Next question"}
             </Button>
           )}
         </div>
