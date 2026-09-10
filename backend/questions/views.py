@@ -505,12 +505,85 @@ class SessionReviewView(APIView):
             .order_by("answered_at")
         )
 
-        results = []
-        for attempt in attempts:
-            question = attempt.question
-            qtype = question.question_type
+        attempts_by_qid = {attempt.question_id: attempt for attempt in attempts}
 
-            your_answer = {}
+        # The client passes the ordered question IDs it served this session
+        # (?questions=3,7,12). Sessions don't persist that list, so without
+        # it a *skipped* question -- one the learner navigated past without
+        # answering -- is simply missing from the review. With it we return
+        # an entry for every served question and flag the un-attempted ones
+        # as skipped (they count as incorrect, exactly as the score treats
+        # them). Omitting the param keeps the old answered-only response.
+        served_ids = self._served_question_ids(
+            request.query_params.get("questions"), list(attempts_by_qid), session
+        )
+
+        skipped_ids = [qid for qid in served_ids if qid not in attempts_by_qid]
+        skipped_questions = {
+            question.id: question
+            for question in Question.objects.filter(id__in=skipped_ids)
+            .select_related("domain")
+            .prefetch_related("options", "blank_answers", "matching_pairs")
+        }
+
+        results = []
+        for qid in served_ids:
+            if len(results) >= session.question_count:
+                break
+            attempt = attempts_by_qid.get(qid)
+            question = attempt.question if attempt is not None else skipped_questions.get(qid)
+            if question is None:
+                # An id in the client list that isn't a real question -- ignore it.
+                continue
+            results.append(self._review_entry(question, attempt))
+
+        return Response(
+            {
+                "session_id": session.id,
+                "question_count": session.question_count,
+                "score": session.score,
+                "mode": session.mode,
+                "skipped_count": sum(1 for r in results if r["skipped"]),
+                "results": results,
+            }
+        )
+
+    # Bounds how many ids we'll parse out of ?questions= regardless of the
+    # session size, so a malformed request can't make us do unbounded work.
+    _MAX_SERVED_IDS = 500
+
+    @classmethod
+    def _served_question_ids(cls, raw, answered_ids, session):
+        """Ordered question IDs to include in the review. Prefers the
+        client-supplied list (?questions=), de-duplicated; falls back to just
+        the answered questions when the param is absent (older clients),
+        leaving the response unchanged. The session-size cap is applied later,
+        to the resolved questions, so bogus ids don't crowd out real ones."""
+        if raw:
+            ordered = []
+            seen = set()
+            for chunk in raw.split(","):
+                chunk = chunk.strip()
+                if not chunk.isdigit():
+                    continue
+                qid = int(chunk)
+                if qid not in seen:
+                    seen.add(qid)
+                    ordered.append(qid)
+                if len(ordered) >= cls._MAX_SERVED_IDS:
+                    break
+            if ordered:
+                return ordered
+        return list(answered_ids)
+
+    @staticmethod
+    def _review_entry(question, attempt):
+        """One review row. `attempt` is None for a skipped question, which
+        reads as incorrect with an empty answer but still reveals the key."""
+        qtype = question.question_type
+
+        your_answer = {}
+        if attempt is not None:
             if qtype in (Question.QuestionType.MCQ, Question.QuestionType.TRUE_FALSE):
                 your_answer["selected_option_id"] = attempt.selected_option_id
                 your_answer["selected_option_text"] = (
@@ -525,42 +598,30 @@ class SessionReviewView(APIView):
             elif qtype == Question.QuestionType.MATCHING:
                 your_answer["matching_response"] = attempt.matching_response
 
-            results.append(
-                {
-                    "question_id": question.id,
-                    "domain": DomainSerializer(question.domain).data,
-                    "text": question.text,
-                    "question_type": qtype,
-                    "difficulty": question.difficulty,
-                    "options": [{"id": opt.id, "text": opt.text} for opt in question.options.all()],
-                    "matching_pairs": [
-                        {"id": pair.id, "prompt_text": pair.prompt_text}
-                        for pair in question.matching_pairs.all()
-                    ],
-                    "is_correct": attempt.is_correct,
-                    "your_answer": your_answer,
-                    # Confidence diagnostics -- see questions.constants.
-                    "confidence": attempt.confidence,
-                    "confidence_label": confidence_label(attempt.confidence),
-                    "high_confidence_mistake": is_high_confidence_mistake(
-                        attempt.confidence, attempt.is_correct
-                    ),
-                    "low_confidence_correct": is_low_confidence_correct(
-                        attempt.confidence, attempt.is_correct
-                    ),
-                    **build_reveal_payload(question),
-                }
-            )
+        confidence = attempt.confidence if attempt is not None else None
+        is_correct = bool(attempt.is_correct) if attempt is not None else False
 
-        return Response(
-            {
-                "session_id": session.id,
-                "question_count": session.question_count,
-                "score": session.score,
-                "mode": session.mode,
-                "results": results,
-            }
-        )
+        return {
+            "question_id": question.id,
+            "domain": DomainSerializer(question.domain).data,
+            "text": question.text,
+            "question_type": qtype,
+            "difficulty": question.difficulty,
+            "options": [{"id": opt.id, "text": opt.text} for opt in question.options.all()],
+            "matching_pairs": [
+                {"id": pair.id, "prompt_text": pair.prompt_text}
+                for pair in question.matching_pairs.all()
+            ],
+            "is_correct": is_correct,
+            "skipped": attempt is None,
+            "your_answer": your_answer,
+            # Confidence diagnostics -- see questions.constants.
+            "confidence": confidence,
+            "confidence_label": confidence_label(confidence),
+            "high_confidence_mistake": is_high_confidence_mistake(confidence, is_correct),
+            "low_confidence_correct": is_low_confidence_correct(confidence, is_correct),
+            **build_reveal_payload(question),
+        }
 
 
 class AdminQuestionViewSet(viewsets.ModelViewSet):

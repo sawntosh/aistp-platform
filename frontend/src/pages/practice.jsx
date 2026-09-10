@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/router";
-import { AlertTriangle, Brain, Check, ClipboardCheck, FolderKanban, GraduationCap, Lightbulb, Puzzle, RefreshCw, Search, Sliders, Target, Wrench } from "lucide-react";
+import { AlertTriangle, ArrowRight, Award, Brain, Check, CircleSlash, ClipboardCheck, Download, FolderKanban, GraduationCap, Lightbulb, Puzzle, RefreshCw, Search, Sliders, Target, Wrench, X } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { usePracticeSession } from "../context/PracticeSessionContext";
 import {
@@ -11,6 +11,11 @@ import {
   submitAnswer,
 } from "../services/questionsService";
 import { fetchDashboardAnalytics } from "../services/analyticsService";
+import {
+  claimCertificate,
+  fetchMyCertificates,
+  certificatePdfUrl,
+} from "../services/certificatesService";
 import QuestionCard from "../components/QuestionCard";
 import FeedbackPanel from "../components/FeedbackPanel";
 import ConfirmModal from "../components/ConfirmModal";
@@ -128,6 +133,17 @@ export default function PracticePage() {
   const [loadError, setLoadError] = useState("");
   const [isSessionComplete, setIsSessionComplete] = useState(false);
   const [showEndConfirm, setShowEndConfirm] = useState(false);
+  // Real Exam / Mock: the first "Submit" press while questions are still
+  // unanswered jumps to the first of them instead of finishing. Only once
+  // the learner has been walked to their skipped questions (or presses
+  // Submit again without answering) does the real submit confirmation open.
+  const [skipNoticeOpen, setSkipNoticeOpen] = useState(false);
+  const [skipsAcknowledged, setSkipsAcknowledged] = useState(false);
+
+  // Certificate (Real Exam, passed): claim it. The name is the username.
+  const [claimedCert, setClaimedCert] = useState(null);
+  const [claimingCert, setClaimingCert] = useState(false);
+  const [claimError, setClaimError] = useState("");
 
   // Domains are public, so even guests browsing before login see real names.
   useEffect(() => {
@@ -313,6 +329,7 @@ export default function PracticePage() {
   // Test Mode review only: human-readable summary of what the learner
   // actually submitted, from SessionReviewView's `your_answer` shape.
   function describeYourAnswer(item) {
+    if (item.skipped) return "Skipped — not answered";
     const submitted = item.your_answer ?? {};
     switch (item.question_type) {
       case "multi_select":
@@ -352,6 +369,10 @@ export default function PracticePage() {
         },
       });
       setSubmittedIds((prev) => new Set(prev).add(questionId));
+      // Answering something clears the "you have skipped questions" state,
+      // so any that remain re-prompt on the next Submit press.
+      setSkipsAcknowledged(false);
+      setSkipNoticeOpen(false);
       // Practice Mode only. Real Exam and the ISTQB Mock Test withhold
       // correctness on submit (the backend returns nothing revealing), so
       // resultsById stays empty and QuestionCard shows no right/wrong
@@ -387,7 +408,12 @@ export default function PracticePage() {
       const finishData = await finishSession(sessionId);
       setFinalScore(finishData.score);
       if (isExamLike) {
-        const review = await fetchSessionReview(sessionId);
+        // Pass every served question id so the review can surface the ones
+        // that were skipped, not just those that got an answer.
+        const review = await fetchSessionReview(
+          sessionId,
+          questions.map((q) => q.id)
+        );
         setTestReview(review);
       }
     } catch {
@@ -395,11 +421,23 @@ export default function PracticePage() {
     }
   }
 
+  function firstUnansweredIndex() {
+    return questions.findIndex((q) => !submittedIds.has(q.id));
+  }
+
   function requestFinish() {
-    // Real Exam / ISTQB Mock Test: submitting is a point of no return, so
-    // always route through the confirmation — even when every question is
-    // answered.
+    // Real Exam / ISTQB Mock Test: submitting is a point of no return.
     if (isExamLike) {
+      const skipIndex = firstUnansweredIndex();
+      // Don't let a Submit press quietly finish the exam while questions
+      // are still unanswered -- send the learner to the first one first.
+      if (skipIndex !== -1 && !skipsAcknowledged) {
+        goToQuestion(skipIndex);
+        setSkipsAcknowledged(true);
+        setLoadError("");
+        setSkipNoticeOpen(true);
+        return;
+      }
       setShowEndConfirm(true);
       return;
     }
@@ -414,6 +452,31 @@ export default function PracticePage() {
     setShowEndConfirm(false);
     await finalizeSession();
     setIsSessionComplete(true);
+  }
+
+  // On the Real Exam results screen: check whether this session already
+  // has a certificate.
+  useEffect(() => {
+    if (!isSessionComplete || mode !== "test") return;
+    fetchMyCertificates()
+      .then((list) => {
+        const match = list.find((c) => c.session === sessionId);
+        if (match) setClaimedCert(match);
+      })
+      .catch(() => {});
+  }, [isSessionComplete, mode, sessionId]);
+
+  async function handleClaimCertificate() {
+    setClaimingCert(true);
+    setClaimError("");
+    try {
+      const cert = await claimCertificate({ sessionId });
+      setClaimedCert(cert);
+    } catch (err) {
+      setClaimError(err?.body?.detail || "Couldn't create your certificate. Try again.");
+    } finally {
+      setClaimingCert(false);
+    }
   }
 
   if (isAuthLoading) return null;
@@ -634,11 +697,21 @@ export default function PracticePage() {
 
   if (isSessionComplete) {
     const isExam = isExamLike;
-    const scoreValue = finalScore ?? correctCount;
-    const scorePercent = totalCount ? Math.round((scoreValue / totalCount) * 100) : 0;
+    // Real Exam / Mock withhold correctness during the session, so `correctCount`
+    // stays 0 -- trust the finished session's score (from the review payload,
+    // falling back to the finish response) instead.
+    const total = (isExam && testReview?.question_count) || totalCount;
+    const scoreValue =
+      (isExam ? testReview?.score : null) ?? finalScore ?? correctCount;
+    const scorePercent = total ? Math.round((scoreValue / total) * 100) : 0;
     const scoreTone = scorePercent >= 70 ? "text-success" : scorePercent >= 40 ? "text-warning" : "text-error";
     const examPassed = scorePercent >= EXAM_PASS_PERCENT;
     const resultsTitle = isMock ? "ISTQB Mock Test results" : isExam ? "Exam results" : "Session complete";
+    const skippedCount =
+      testReview?.skipped_count ??
+      testReview?.results?.filter((r) => r.skipped).length ??
+      0;
+    const incorrectCount = Math.max(total - scoreValue - skippedCount, 0);
 
     return (
       <div className="min-h-[calc(100vh-57px)] sm:min-h-screen bg-background px-4 py-10 sm:px-6">
@@ -656,16 +729,112 @@ export default function PracticePage() {
               </p>
             )}
             <p className={cn("mb-1 text-3xl font-semibold", scoreTone)}>
-              {scoreValue} / {totalCount}
+              {scoreValue} / {total}
             </p>
-            <p className="mb-6 text-body-sm text-text-muted">
+            <p className="mb-4 text-body-sm text-text-muted">
               {scorePercent}% correct
               {isExam && ` · ${EXAM_PASS_PERCENT}% required to pass (ISTQB CTFL standard)`}
             </p>
+            {isExam && testReview && (
+              <div className="mb-6 flex flex-wrap justify-center gap-2">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-success-muted px-3 py-1 text-caption font-semibold text-success">
+                  <Check className="h-3 w-3" aria-hidden="true" />
+                  {scoreValue} correct
+                </span>
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-error-muted px-3 py-1 text-caption font-semibold text-error">
+                  <X className="h-3 w-3" aria-hidden="true" />
+                  {incorrectCount} incorrect
+                </span>
+                {skippedCount > 0 && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-warning-muted px-3 py-1 text-caption font-semibold text-warning">
+                    <CircleSlash className="h-3 w-3" aria-hidden="true" />
+                    {skippedCount} skipped
+                  </span>
+                )}
+              </div>
+            )}
             <Button tone="test" onClick={backToSetup} className="w-full">
               {isMock ? "Start another mock test" : isExam ? "Start another exam" : "Start another session"}
             </Button>
           </Card>
+
+          {isExam && !isMock && (
+            <Card className="p-6">
+              {!examPassed ? (
+                <div className="flex items-center gap-3">
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-surface-muted text-text-muted">
+                    <Award className="h-5 w-5" aria-hidden="true" />
+                  </span>
+                  <div>
+                    <p className="text-body-sm font-semibold text-text-primary">
+                      No certificate this time
+                    </p>
+                    <p className="text-caption text-text-muted">
+                      Score {EXAM_PASS_PERCENT}% or higher on a Real Exam to earn your
+                      AISTP certificate. You reached {scorePercent}%.
+                    </p>
+                  </div>
+                </div>
+              ) : claimedCert ? (
+                <div className="flex flex-col items-center gap-3 text-center sm:flex-row sm:text-left">
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-test-muted text-test">
+                    <Award className="h-5 w-5" aria-hidden="true" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-body-sm font-semibold text-text-primary">
+                      Your certificate is ready
+                    </p>
+                    <p className="text-caption text-text-muted">
+                      Issued to {claimedCert.recipient_name} · ID {claimedCert.certificate_id}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap justify-center gap-2">
+                    <Button
+                      href={`/certificate/${claimedCert.certificate_id}`}
+                      tone="test"
+                      size="sm"
+                    >
+                      View certificate
+                    </Button>
+                    <Button
+                      href={certificatePdfUrl(claimedCert.certificate_id, { download: true })}
+                      variant="outline"
+                      size="sm"
+                    >
+                      <Download className="h-4 w-4" aria-hidden="true" />
+                      PDF
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <div className="flex flex-col items-center gap-3 text-center sm:flex-row sm:text-left">
+                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-test-muted text-test">
+                      <Award className="h-5 w-5" aria-hidden="true" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-body-sm font-semibold text-text-primary">
+                        You passed — claim your certificate
+                      </p>
+                      <p className="text-caption text-text-muted">
+                        It will be issued to {user?.username}.
+                      </p>
+                    </div>
+                    <Button
+                      tone="test"
+                      onClick={handleClaimCertificate}
+                      isLoading={claimingCert}
+                    >
+                      Get your certificate
+                    </Button>
+                  </div>
+                  {claimError && (
+                    <p className="mt-3 text-caption text-error">{claimError}</p>
+                  )}
+                </div>
+              )}
+            </Card>
+          )}
 
           {isExam && testReview && (
             <div className="space-y-4">
@@ -673,16 +842,35 @@ export default function PracticePage() {
               {testReview.results.map((item, index) => {
                 const domainColor = getDomainColor(item.domain?.name);
                 return (
-                  <Card key={item.question_id} className="p-5">
-                    <div className="mb-2 flex items-center justify-between">
+                  <Card
+                    key={item.question_id}
+                    className={cn(
+                      "p-5",
+                      item.skipped && "border-l-4 border-l-warning bg-warning-muted/20"
+                    )}
+                  >
+                    <div className="mb-2 flex items-center justify-between gap-2">
                       <span className={cn("inline-block rounded-full px-3 py-1 text-caption font-medium", domainColor.bg, domainColor.text)}>
                         {item.domain?.name}
                       </span>
-                      <span className="text-caption font-medium uppercase tracking-wide text-text-muted">Question {index + 1}</span>
+                      <span className="flex items-center gap-2">
+                        {item.skipped && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-warning-muted px-2.5 py-1 text-caption font-semibold text-warning">
+                            <CircleSlash className="h-3 w-3" aria-hidden="true" />
+                            Skipped
+                          </span>
+                        )}
+                        <span className="text-caption font-medium uppercase tracking-wide text-text-muted">
+                          Question {index + 1}
+                        </span>
+                      </span>
                     </div>
                     <p className="mb-2 text-body-sm font-medium text-text-primary">{item.text}</p>
                     <p className="mb-1 text-body-sm text-text-secondary">
-                      Your answer: <span className="font-medium text-text-primary">{describeYourAnswer(item)}</span>
+                      Your answer:{" "}
+                      <span className={cn("font-medium", item.skipped ? "text-warning" : "text-text-primary")}>
+                        {describeYourAnswer(item)}
+                      </span>
                     </p>
                     {item.confidence != null && (
                       <p className="mb-3 text-body-sm text-text-secondary">
@@ -734,33 +922,45 @@ export default function PracticePage() {
   }
 
   const progressPercent = totalCount ? (answeredCount / totalCount) * 100 : 0;
+  const unansweredCount = totalCount - answeredCount;
   const isLastPage = currentPage >= pageCount - 1;
 
   return (
     <div className="min-h-[calc(100vh-57px)] sm:min-h-screen bg-background px-4 py-10 sm:px-6">
       <div className="mx-auto max-w-2xl">
         {isExamLike ? (
-          <div className="mb-4 rounded-lg border border-test/20 bg-test-muted/40 px-5 py-3">
-            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-              <div>
-                <p className="text-caption font-semibold uppercase tracking-wide text-test">
-                  {isMock ? "ISTQB Mock Test" : "Real Exam"}
-                </p>
-                <p className="text-body-sm font-medium text-text-primary">
-                  Question {pageStart + 1}–{Math.min(pageStart + PER_PAGE, questions.length)} of {totalCount}
-                </p>
-              </div>
+          <div className="mb-4 rounded-xl border border-test/20 bg-test-muted/40 p-4 sm:p-5">
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
               <div className="flex items-center gap-3">
-                <span className="text-body-sm tabular-nums text-text-secondary">
-                  {answeredCount}/{totalCount} answered
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-surface text-test shadow-xs">
+                  {isMock ? (
+                    <GraduationCap className="h-4 w-4" aria-hidden="true" />
+                  ) : (
+                    <ClipboardCheck className="h-4 w-4" aria-hidden="true" />
+                  )}
                 </span>
-                <button
-                  type="button"
-                  onClick={() => setShowEndConfirm(true)}
-                  className="cursor-pointer rounded-md border border-test/40 px-3 py-1 text-caption font-semibold text-test transition-colors hover:bg-test hover:text-white"
-                >
-                  {isMock ? "Submit mock test" : "Submit exam"}
-                </button>
+                <div>
+                  <p className="text-caption font-semibold uppercase tracking-wide text-test">
+                    {isMock ? "ISTQB Mock Test" : "Real Exam"}
+                  </p>
+                  <p className="text-body-sm font-medium text-text-primary">
+                    Question {pageStart + 1}–{Math.min(pageStart + PER_PAGE, questions.length)} of {totalCount}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-surface px-2.5 py-1 text-caption font-semibold tabular-nums text-text-secondary shadow-xs">
+                  <Check className="h-3 w-3 text-test" aria-hidden="true" />
+                  {answeredCount}/{totalCount}
+                </span>
+                {unansweredCount > 0 && (
+                  <span className="inline-flex items-center rounded-full bg-warning-muted px-2.5 py-1 text-caption font-semibold tabular-nums text-warning">
+                    {unansweredCount} left
+                  </span>
+                )}
+                <Button tone="test" size="sm" onClick={requestFinish}>
+                  {isMock ? "Submit" : "Submit exam"}
+                </Button>
               </div>
             </div>
           </div>
@@ -785,29 +985,99 @@ export default function PracticePage() {
 
         <Progress value={progressPercent} tone="test" className="mb-4" />
 
-        {/* Question navigator: jump to any question; filled = answered. */}
-        <div className="mb-6 flex flex-wrap gap-1.5">
-          {questions.map((q, index) => {
-            const onThisPage = index >= pageStart && index < pageStart + PER_PAGE;
-            const submitted = submittedIds.has(q.id);
-            return (
-              <button
-                key={q.id}
-                type="button"
-                onClick={() => goToQuestion(index)}
-                aria-current={onThisPage ? "true" : undefined}
-                className={cn(
-                  "h-7 w-7 rounded-md border text-caption font-medium tabular-nums transition-colors",
-                  submitted
-                    ? "border-test bg-test text-white"
-                    : "border-border bg-surface text-text-muted hover:border-test/40",
-                  onThisPage && "ring-2 ring-test/40 ring-offset-1"
-                )}
+        {isExamLike && skipNoticeOpen && unansweredCount > 0 && (
+          <div className="mb-6 flex items-start gap-3 rounded-xl border border-warning/30 bg-warning-muted/60 p-4 animate-fade-in">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-surface text-warning shadow-xs">
+              <AlertTriangle className="h-4 w-4" aria-hidden="true" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-body-sm font-semibold text-text-primary">
+                  {unansweredCount} question{unansweredCount === 1 ? "" : "s"} still unanswered
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setSkipNoticeOpen(false)}
+                  aria-label="Dismiss"
+                  className="-mr-1 -mt-1 shrink-0 cursor-pointer rounded-md p-1 text-text-muted transition-colors hover:bg-warning-muted hover:text-text-secondary"
+                >
+                  <X className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
+              </div>
+              <p className="mt-0.5 text-caption text-text-secondary">
+                Answer {unansweredCount === 1 ? "it" : "them"} below, or press{" "}
+                <span className="font-medium text-text-primary">
+                  {isMock ? "Submit mock test" : "Submit exam"}
+                </span>{" "}
+                again to finish with {unansweredCount === 1 ? "it" : "them"} marked incorrect.
+              </p>
+              <Button
+                tone="test"
+                size="sm"
+                className="mt-2.5"
+                onClick={() => {
+                  const idx = firstUnansweredIndex();
+                  if (idx !== -1) goToQuestion(idx);
+                }}
               >
-                {index + 1}
-              </button>
-            );
-          })}
+                Go to unanswered
+                <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Question navigator: jump to any question. */}
+        <div className="mb-6">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-caption font-semibold uppercase tracking-wide text-text-muted">
+              Questions
+            </p>
+            <div className="flex items-center gap-3 text-caption text-text-muted">
+              <span className="flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-sm bg-test" aria-hidden="true" />
+                Answered
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span
+                  className={cn(
+                    "h-2.5 w-2.5 rounded-sm border",
+                    isExamLike && skipsAcknowledged
+                      ? "border-warning/60 bg-warning-muted"
+                      : "border-border-strong bg-surface"
+                  )}
+                  aria-hidden="true"
+                />
+                {isExamLike && skipsAcknowledged ? "Skipped" : "Unanswered"}
+              </span>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {questions.map((q, index) => {
+              const onThisPage = index >= pageStart && index < pageStart + PER_PAGE;
+              const submitted = submittedIds.has(q.id);
+              return (
+                <button
+                  key={q.id}
+                  type="button"
+                  onClick={() => goToQuestion(index)}
+                  aria-current={onThisPage ? "true" : undefined}
+                  aria-label={`Question ${index + 1}${submitted ? " (answered)" : " (not answered)"}`}
+                  className={cn(
+                    "flex h-8 w-8 items-center justify-center rounded-md border text-caption font-semibold tabular-nums transition-all",
+                    submitted
+                      ? "border-test bg-test text-white"
+                      : isExamLike && skipsAcknowledged
+                        ? "border-warning/60 bg-warning-muted text-warning hover:border-warning"
+                        : "border-border bg-surface text-text-muted hover:border-test/40 hover:text-text-secondary",
+                    onThisPage && "ring-2 ring-test/40 ring-offset-1"
+                  )}
+                >
+                  {index + 1}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {pageQuestions.map((question) => {
@@ -896,7 +1166,12 @@ export default function PracticePage() {
         confirmLabel={isExamLike ? `Submit ${isMock ? "mock test" : "exam"}` : "End session"}
         cancelLabel={isExamLike ? "Keep working" : "Keep practicing"}
         onConfirm={endSession}
-        onCancel={() => setShowEndConfirm(false)}
+        onCancel={() => {
+          setShowEndConfirm(false);
+          // Make a later Submit press walk them back through any skipped
+          // questions again rather than reopening this dialog straight away.
+          setSkipsAcknowledged(false);
+        }}
       />
     </div>
   );
