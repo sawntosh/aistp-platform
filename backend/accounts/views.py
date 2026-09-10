@@ -1,12 +1,12 @@
 """
 accounts/views.py -- FR-01: Registration & Authentication
 
-Register hashes the password (bcrypt hasher) and activates the account
-immediately -- email verification is not required to sign up or log in.
-The verify-email / resend endpoints still exist (dormant) so the gate can
-be switched back on later. Login issues a JWT via SimpleJWT and is
-protected by a per-(username, IP) lockout on top of the scoped rate
-throttle.
+Register hashes the password (bcrypt hasher) and mails a 6-digit
+verification code; the account can't log in until that code is confirmed
+(LoginView returns 403 for an unverified account). Login issues a JWT via
+SimpleJWT and is protected by a per-(username, IP) lockout on top of the
+scoped rate throttle. Forgot-password works the same way: a 6-digit code
+is mailed and exchanged for a new password.
 """
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
@@ -18,14 +18,13 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 
 from . import lockout
 from .emails import (
-    PasswordResetTokenError,
-    VerificationTokenError,
-    password_fingerprint,
-    read_password_reset_token,
-    read_token,
-    send_password_reset_email,
-    send_verification_email,
+    OTPError,
+    can_resend,
+    send_password_reset_code,
+    send_verification_code,
+    verify_code,
 )
+from .models import EmailOTP
 from .serializers import (
     USERNAME_MIN_LENGTH,
     USERNAME_RE,
@@ -48,8 +47,8 @@ def _locked_message(ident):
 
 
 class RegisterView(generics.CreateAPIView):
-    """FR-01: create a new student account, active immediately. Issues no
-    tokens -- the client logs in separately.
+    """FR-01: create a new student account and mail its verification code.
+    Issues no tokens -- the client verifies, then logs in separately.
 
     Rate-limited (throttle_scope="register") so the open, unauthenticated
     endpoint can't be used to mass-create accounts / fill the users table.
@@ -60,20 +59,19 @@ class RegisterView(generics.CreateAPIView):
     serializer_class = RegisterSerializer
 
     def perform_create(self, serializer):
-        # Email verification is not required to sign up: mark the account
-        # verified so nothing downstream gates on it. The verify-email
-        # flow still exists (dormant) if this is switched back on.
+        # RegisterSerializer.create() leaves email_verified=False; the
+        # account can't log in until the mailed code is confirmed.
         user = serializer.save()
-        user.email_verified = True
-        user.save(update_fields=["email_verified"])
+        send_verification_code(user)
 
 
 class LoginView(TokenObtainPairView):
     """Rate-limited (throttle_scope="login") + per-(username, IP) lockout.
 
-    - locked pair     -> 423 Locked
-    - bad credentials -> 401 (counts toward the lockout)
-    - correct         -> 200 with access/refresh (no email-verification gate)
+    - locked pair       -> 423 Locked
+    - bad credentials   -> 401 (counts toward the lockout)
+    - unverified email  -> 403 with {"can_resend": true}
+    - correct+verified  -> 200 with access/refresh
     """
     throttle_scope = "login"
 
@@ -101,39 +99,62 @@ class LoginView(TokenObtainPairView):
         # Credentials are correct -- clear the failure counter.
         lockout.clear(ident)
 
+        # FR-01: the account's email must be confirmed before it can log in.
+        if not serializer.user.email_verified:
+            return Response(
+                {
+                    "detail": "Verify your email address before logging in. "
+                    "Enter the 6-digit code we sent you.",
+                    "can_resend": True,
+                    "email": serializer.user.email,
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         return Response(serializer.validated_data, status=status.HTTP_200_OK)
 
 
 class VerifyEmailView(APIView):
-    """POST {token} from the emailed link -> marks the account verified.
-    Idempotent: a second call for an already-verified account still 200s."""
+    """POST {email, code} -> marks the account verified.
+    Idempotent: a call for an already-verified account still 200s."""
     permission_classes = [permissions.AllowAny]
     throttle_scope = "register"
 
     def post(self, request):
         serializer = EmailVerificationSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        try:
-            uid = read_token(serializer.validated_data["token"])
-        except VerificationTokenError as exc:
-            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
-        user = User.objects.filter(pk=uid).first()
+        user = User.objects.filter(
+            email__iexact=serializer.validated_data["email"]
+        ).first()
         if user is None:
             return Response(
-                {"detail": "This verification link is invalid."},
+                {"detail": "That code is incorrect or has expired."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        if not user.email_verified:
-            user.email_verified = True
-            user.save(update_fields=["email_verified"])
+        if user.email_verified:
+            return Response({"detail": "Email already verified. You can log in."})
+
+        try:
+            verify_code(
+                user,
+                EmailOTP.Purpose.VERIFY_EMAIL,
+                serializer.validated_data["code"],
+            )
+        except OTPError as exc:
+            return Response(
+                {"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        user.email_verified = True
+        user.save(update_fields=["email_verified"])
         return Response({"detail": "Email verified. You can now log in."})
 
 
 class ResendVerificationView(APIView):
-    """POST {email} -> re-sends the link if that address maps to an
-    unverified account. Always 200 (never reveals whether an email is
-    registered)."""
+    """POST {email} -> re-sends a code if that address maps to an unverified
+    account and the resend cooldown has elapsed. Always 200 (never reveals
+    whether an email is registered)."""
     permission_classes = [permissions.AllowAny]
     throttle_scope = "register"
 
@@ -143,16 +164,17 @@ class ResendVerificationView(APIView):
         user = User.objects.filter(
             email__iexact=serializer.validated_data["email"], email_verified=False
         ).first()
-        if user is not None:
-            send_verification_email(user)
+        if user is not None and can_resend(user, EmailOTP.Purpose.VERIFY_EMAIL):
+            send_verification_code(user)
         return Response(
-            {"detail": "If that email needs verification, a new link is on its way."}
+            {"detail": "If that email needs verification, a new code is on its way."}
         )
 
 
 class PasswordResetRequestView(APIView):
-    """POST {email} -> mails a reset link if that address maps to an
-    account. Always 200 (never reveals whether an email is registered).
+    """POST {email} -> mails a reset code if that address maps to an account
+    and the resend cooldown has elapsed. Always 200 (never reveals whether
+    an email is registered).
 
     Rate-limited under the "register" scope like the other open, unauth'd
     account endpoints."""
@@ -165,21 +187,20 @@ class PasswordResetRequestView(APIView):
         user = User.objects.filter(
             email__iexact=serializer.validated_data["email"]
         ).first()
-        if user is not None:
-            send_password_reset_email(user)
+        if user is not None and can_resend(user, EmailOTP.Purpose.PASSWORD_RESET):
+            send_password_reset_code(user)
         return Response(
             {
                 "detail": "If an account exists for that email, a password "
-                "reset link is on its way."
+                "reset code is on its way."
             }
         )
 
 
 class PasswordResetConfirmView(APIView):
-    """POST {token, password, confirm_password} from the emailed link ->
-    sets the new password. The token is single-use: it carries a
-    fingerprint of the old password hash, so once the password changes the
-    same link (and any older ones) stop working."""
+    """POST {email, code, password, confirm_password} -> sets the new
+    password. The code is single-use: verify_code() consumes it, so the
+    same code (and any older ones) stop working afterwards."""
     permission_classes = [permissions.AllowAny]
     throttle_scope = "register"
 
@@ -187,21 +208,24 @@ class PasswordResetConfirmView(APIView):
         serializer = PasswordResetConfirmSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        try:
-            uid, fingerprint = read_password_reset_token(
-                serializer.validated_data["token"]
-            )
-        except PasswordResetTokenError as exc:
-            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-
-        user = User.objects.filter(pk=uid).first()
-        if user is None or password_fingerprint(user) != fingerprint:
+        user = User.objects.filter(
+            email__iexact=serializer.validated_data["email"]
+        ).first()
+        if user is None:
             return Response(
-                {
-                    "detail": "This password reset link is invalid or has "
-                    "already been used."
-                },
+                {"detail": "That code is incorrect or has expired."},
                 status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            verify_code(
+                user,
+                EmailOTP.Purpose.PASSWORD_RESET,
+                serializer.validated_data["code"],
+            )
+        except OTPError as exc:
+            return Response(
+                {"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST
             )
 
         password = serializer.validated_data["password"]

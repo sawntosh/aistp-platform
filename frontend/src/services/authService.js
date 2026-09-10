@@ -21,13 +21,17 @@ export async function checkAvailability({ username, email } = {}) {
   return apiFetch(`/auth/availability/?${params.toString()}`);
 }
 
-export async function verifyEmail(token) {
+// Exchange the 6-digit code mailed on registration for a verified account.
+export async function verifyEmail({ email, code }) {
   return apiFetch("/auth/verify-email/", {
     method: "POST",
-    body: JSON.stringify({ token }),
+    body: JSON.stringify({ email, code }),
   });
 }
 
+// Always resolves 200 with a generic message -- the backend never reveals
+// whether the address maps to an unverified account, and silently ignores
+// the request if a code was already sent within the resend cooldown.
 export async function resendVerification(email) {
   return apiFetch("/auth/resend-verification/", {
     method: "POST",
@@ -44,10 +48,15 @@ export async function requestPasswordReset(email) {
   });
 }
 
-export async function confirmPasswordReset({ token, password, confirmPassword }) {
+export async function confirmPasswordReset({ email, code, password, confirmPassword }) {
   return apiFetch("/auth/password-reset/confirm/", {
     method: "POST",
-    body: JSON.stringify({ token, password, confirm_password: confirmPassword }),
+    body: JSON.stringify({
+      email,
+      code,
+      password,
+      confirm_password: confirmPassword,
+    }),
   });
 }
 

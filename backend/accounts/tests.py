@@ -2,17 +2,20 @@
 Authentication API tests -- FR-01.
 
 Registration validation (username charset, password policy, Gmail rule,
-duplicates, boundaries), the (dormant) email verify/resend endpoints,
-login outcomes, per-(username, IP) lockout, and JWT handling on the
-protected /me/ endpoint.
+duplicates, boundaries), the email verification code flow, the login
+email-verified gate, per-(username, IP) lockout, JWT handling on the
+protected /me/ endpoint, and the password-reset code flow.
 """
+import re
+
 from django.core import mail
 from django.core.cache import cache
 from django.contrib.auth import get_user_model
 from django.test import override_settings
 from rest_framework.test import APITestCase
 
-from accounts.emails import make_password_reset_token, make_token
+from accounts.emails import issue_code
+from accounts.models import EmailOTP
 
 User = get_user_model()
 
@@ -24,6 +27,13 @@ VALID = {
 }
 
 
+def code_from_outbox(index=-1):
+    """Pull the 6-digit code out of a verification / reset email body."""
+    match = re.search(r"\b(\d{6})\b", mail.outbox[index].body)
+    assert match, f"no 6-digit code in:\n{mail.outbox[index].body}"
+    return match.group(1)
+
+
 class RegistrationValidationTests(APITestCase):
     def setUp(self):
         cache.clear()
@@ -32,15 +42,21 @@ class RegistrationValidationTests(APITestCase):
     def _register(self, **overrides):
         return self.client.post("/api/auth/register/", {**VALID, **overrides})
 
-    def test_valid_registration_creates_active_user_and_sends_no_email(self):
+    def test_valid_registration_creates_unverified_user_and_mails_a_code(self):
         resp = self._register()
         self.assertEqual(resp.status_code, 201)
         user = User.objects.get(username="alice")
-        # Email verification is not required to sign up.
-        self.assertTrue(user.email_verified)
+        self.assertFalse(user.email_verified)
         self.assertEqual(user.role, User.Role.STUDENT)
-        self.assertEqual(len(mail.outbox), 0)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, ["alice@gmail.com"])
+        self.assertRegex(mail.outbox[0].body, r"\b\d{6}\b")
         self.assertNotIn("password", resp.data)
+        self.assertTrue(
+            EmailOTP.objects.filter(
+                user=user, purpose=EmailOTP.Purpose.VERIFY_EMAIL
+            ).exists()
+        )
 
     def test_password_is_hashed(self):
         self._register()
@@ -187,19 +203,21 @@ class AvailabilityEndpointTests(APITestCase):
         self.assertEqual(resp.data, {})
 
 
+@override_settings(EMAIL_OTP_RESEND_COOLDOWN=0)
 class EmailVerificationTests(APITestCase):
     def setUp(self):
         cache.clear()
         mail.outbox = []
-        # Sign-up auto-verifies now, so create an explicitly-unverified
-        # user to exercise the (dormant) verify / resend endpoints.
         self.user = User.objects.create_user(
             username="alice", email=VALID["email"], password=VALID["password"]
         )
 
-    def test_valid_token_verifies_and_enables_login(self):
-        token = make_token(self.user)
-        resp = self.client.post("/api/auth/verify-email/", {"token": token})
+    def _verify(self, **body):
+        return self.client.post("/api/auth/verify-email/", body)
+
+    def test_correct_code_verifies_and_enables_login(self):
+        code = issue_code(self.user, EmailOTP.Purpose.VERIFY_EMAIL)
+        resp = self._verify(email=self.user.email, code=code)
         self.assertEqual(resp.status_code, 200)
         self.user.refresh_from_db()
         self.assertTrue(self.user.email_verified)
@@ -210,33 +228,64 @@ class EmailVerificationTests(APITestCase):
         self.assertEqual(login.status_code, 200)
         self.assertIn("access", login.data)
 
-    def test_invalid_token_is_rejected(self):
-        resp = self.client.post("/api/auth/verify-email/", {"token": "garbage"})
+    def test_wrong_code_is_rejected(self):
+        issue_code(self.user, EmailOTP.Purpose.VERIFY_EMAIL)
+        resp = self._verify(email=self.user.email, code="000000")
         self.assertEqual(resp.status_code, 400)
         self.user.refresh_from_db()
         self.assertFalse(self.user.email_verified)
 
-    @override_settings(EMAIL_VERIFICATION_MAX_AGE=-1)
-    def test_expired_token_is_rejected(self):
-        resp = self.client.post("/api/auth/verify-email/", {"token": make_token(self.user)})
+    def test_code_is_rejected_after_too_many_attempts(self):
+        issue_code(self.user, EmailOTP.Purpose.VERIFY_EMAIL)
+        for _ in range(5):
+            self._verify(email=self.user.email, code="000000")
+        resp = self._verify(email=self.user.email, code="000000")
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("attempts", str(resp.data["detail"]).lower())
+
+    @override_settings(EMAIL_OTP_MAX_AGE=-1)
+    def test_expired_code_is_rejected(self):
+        code = issue_code(self.user, EmailOTP.Purpose.VERIFY_EMAIL)
+        resp = self._verify(email=self.user.email, code=code)
         self.assertEqual(resp.status_code, 400)
         self.assertIn("expired", str(resp.data["detail"]).lower())
 
-    def test_verify_is_idempotent(self):
-        token = make_token(self.user)
-        self.client.post("/api/auth/verify-email/", {"token": token})
-        again = self.client.post("/api/auth/verify-email/", {"token": token})
-        self.assertEqual(again.status_code, 200)
+    def test_verify_for_already_verified_account_still_200s(self):
+        self.user.email_verified = True
+        self.user.save(update_fields=["email_verified"])
+        resp = self._verify(email=self.user.email, code="123456")
+        self.assertEqual(resp.status_code, 200)
 
-    def test_resend_sends_a_fresh_link_for_unverified_account(self):
+    def test_issuing_a_new_code_invalidates_the_previous_one(self):
+        first = issue_code(self.user, EmailOTP.Purpose.VERIFY_EMAIL)
+        issue_code(self.user, EmailOTP.Purpose.VERIFY_EMAIL)
+        resp = self._verify(email=self.user.email, code=first)
+        self.assertEqual(resp.status_code, 400)
+
+    def test_resend_sends_a_fresh_code_for_unverified_account(self):
         mail.outbox = []
-        resp = self.client.post("/api/auth/resend-verification/", {"email": "alice@gmail.com"})
+        resp = self.client.post(
+            "/api/auth/resend-verification/", {"email": "alice@gmail.com"}
+        )
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(len(mail.outbox), 1)
+        self.assertRegex(mail.outbox[0].body, r"\b\d{6}\b")
 
     def test_resend_for_unknown_email_still_returns_200_and_sends_nothing(self):
         mail.outbox = []
-        resp = self.client.post("/api/auth/resend-verification/", {"email": "nobody@gmail.com"})
+        resp = self.client.post(
+            "/api/auth/resend-verification/", {"email": "nobody@gmail.com"}
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(len(mail.outbox), 0)
+
+    @override_settings(EMAIL_OTP_RESEND_COOLDOWN=600)
+    def test_resend_is_rate_limited_by_the_cooldown(self):
+        issue_code(self.user, EmailOTP.Purpose.VERIFY_EMAIL)
+        mail.outbox = []
+        resp = self.client.post(
+            "/api/auth/resend-verification/", {"email": "alice@gmail.com"}
+        )
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(len(mail.outbox), 0)
 
@@ -261,14 +310,13 @@ class LoginGateTests(APITestCase):
         self.assertIn("access", resp.data)
         self.assertIn("refresh", resp.data)
 
-    def test_unverified_user_with_correct_password_still_gets_tokens(self):
-        # Email verification is not required to log in.
+    def test_unverified_user_with_correct_password_is_blocked_with_403(self):
         resp = self.client.post(
             "/api/auth/login/", {"username": "dan", "password": "Str0ngPass!23"}
         )
-        self.assertEqual(resp.status_code, 200)
-        self.assertIn("access", resp.data)
-        self.assertIn("refresh", resp.data)
+        self.assertEqual(resp.status_code, 403)
+        self.assertTrue(resp.data.get("can_resend"))
+        self.assertNotIn("access", resp.data)
 
     def test_wrong_password_is_rejected(self):
         resp = self.client.post(
@@ -362,6 +410,7 @@ class JwtProtectedEndpointTests(APITestCase):
         self.assertEqual(self.client.get("/api/auth/me/").status_code, 401)
 
 
+@override_settings(EMAIL_OTP_RESEND_COOLDOWN=0)
 class PasswordResetTests(APITestCase):
     def setUp(self):
         cache.clear()
@@ -378,21 +427,25 @@ class PasswordResetTests(APITestCase):
     def _confirm(self, **body):
         return self.client.post("/api/auth/password-reset/confirm/", body)
 
-    def test_request_for_known_email_sends_a_reset_link(self):
+    def test_request_for_known_email_mails_a_reset_code(self):
         resp = self._request()
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(len(mail.outbox), 1)
-        self.assertIn("reset-password?token=", mail.outbox[0].body)
+        self.assertRegex(mail.outbox[0].body, r"\b\d{6}\b")
 
     def test_request_for_unknown_email_still_returns_200_and_sends_nothing(self):
         resp = self._request("nobody@gmail.com")
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(len(mail.outbox), 0)
 
-    def test_valid_token_sets_new_password_and_enables_login(self):
-        token = make_password_reset_token(self.user)
+    def test_correct_code_sets_new_password_and_enables_login(self):
+        self._request()
+        code = code_from_outbox()
         resp = self._confirm(
-            token=token, password="N3wStr0ng!pw", confirm_password="N3wStr0ng!pw"
+            email=self.user.email,
+            code=code,
+            password="N3wStr0ng!pw",
+            confirm_password="N3wStr0ng!pw",
         )
         self.assertEqual(resp.status_code, 200)
         self.user.refresh_from_db()
@@ -404,44 +457,67 @@ class PasswordResetTests(APITestCase):
         self.assertEqual(login.status_code, 200)
         self.assertIn("access", login.data)
 
-    def test_token_is_single_use(self):
-        token = make_password_reset_token(self.user)
+    def test_code_is_single_use(self):
+        self._request()
+        code = code_from_outbox()
         first = self._confirm(
-            token=token, password="N3wStr0ng!pw", confirm_password="N3wStr0ng!pw"
+            email=self.user.email,
+            code=code,
+            password="N3wStr0ng!pw",
+            confirm_password="N3wStr0ng!pw",
         )
         self.assertEqual(first.status_code, 200)
         again = self._confirm(
-            token=token, password="An0ther!pw99", confirm_password="An0ther!pw99"
+            email=self.user.email,
+            code=code,
+            password="An0ther!pw99",
+            confirm_password="An0ther!pw99",
         )
         self.assertEqual(again.status_code, 400)
 
     def test_mismatched_passwords_are_rejected(self):
-        token = make_password_reset_token(self.user)
+        self._request()
+        code = code_from_outbox()
         resp = self._confirm(
-            token=token, password="N3wStr0ng!pw", confirm_password="different!9X"
+            email=self.user.email,
+            code=code,
+            password="N3wStr0ng!pw",
+            confirm_password="different!9X",
         )
         self.assertEqual(resp.status_code, 400)
         self.assertIn("confirm_password", resp.data)
 
     def test_weak_new_password_is_rejected_by_policy(self):
-        token = make_password_reset_token(self.user)
+        self._request()
+        code = code_from_outbox()
         resp = self._confirm(
-            token=token, password="alllowercase", confirm_password="alllowercase"
+            email=self.user.email,
+            code=code,
+            password="alllowercase",
+            confirm_password="alllowercase",
         )
         self.assertEqual(resp.status_code, 400)
         self.assertIn("password", resp.data)
 
-    def test_garbage_token_is_rejected(self):
+    def test_wrong_code_is_rejected(self):
+        self._request()
         resp = self._confirm(
-            token="garbage", password="N3wStr0ng!pw", confirm_password="N3wStr0ng!pw"
+            email=self.user.email,
+            code="000000",
+            password="N3wStr0ng!pw",
+            confirm_password="N3wStr0ng!pw",
         )
         self.assertEqual(resp.status_code, 400)
 
-    @override_settings(PASSWORD_RESET_MAX_AGE=-1)
-    def test_expired_token_is_rejected(self):
-        token = make_password_reset_token(self.user)
+    @override_settings(EMAIL_OTP_MAX_AGE=-1)
+    def test_expired_code_is_rejected(self):
+        self._request()
+        code = code_from_outbox()
         resp = self._confirm(
-            token=token, password="N3wStr0ng!pw", confirm_password="N3wStr0ng!pw"
+            email=self.user.email,
+            code=code,
+            password="N3wStr0ng!pw",
+            confirm_password="N3wStr0ng!pw",
         )
         self.assertEqual(resp.status_code, 400)
         self.assertIn("expired", str(resp.data["detail"]).lower())
