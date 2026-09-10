@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import Link from "next/link";
-import { ArrowLeft, Check, GraduationCap, Loader2, MailCheck, X } from "lucide-react";
+import { ArrowLeft, Check, GraduationCap, Loader2, X } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
-import { checkAvailability, resendVerification } from "../services/authService";
+import { checkAvailability } from "../services/authService";
 import { getErrorMessage } from "../services/apiClient";
 import PasswordInput from "../components/PasswordInput";
 import Input, { Label } from "../components/ui/Input";
@@ -92,7 +92,6 @@ export default function RegisterPage() {
   const [error, setError] = useState("");
   const [errorKey, setErrorKey] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [registeredEmail, setRegisteredEmail] = useState("");
   const [usernameStatus, setUsernameStatus] = useState("unknown");
   const [emailStatus, setEmailStatus] = useState("unknown");
 
@@ -210,51 +209,14 @@ export default function RegisterPage() {
     setIsSubmitting(true);
     try {
       await register({ ...form, username, email });
-      // No email verification step -- the account is active right away.
-      router.push("/login?registered=1");
+      // The account is created unverified: send the user to enter the
+      // 6-digit code we just emailed.
+      router.push(`/verify-email?email=${encodeURIComponent(email)}`);
     } catch (err) {
       showError(getErrorMessage(err, "Registration failed. Check your details and try again."));
     } finally {
       setIsSubmitting(false);
     }
-  }
-
-  async function handleResend() {
-    setError("");
-    try {
-      await resendVerification(registeredEmail);
-      showError("");
-    } catch {
-      showError("Couldn't resend right now. Try again in a moment.");
-    }
-  }
-
-  if (registeredEmail) {
-    return (
-      <div className="relative flex min-h-screen w-full items-center justify-center bg-background px-4 py-12">
-        <div className="w-full max-w-sm rounded-lg border border-border bg-surface p-8 text-center shadow-sm">
-          <span className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-success-muted text-success">
-            <MailCheck className="h-6 w-6" aria-hidden="true" />
-          </span>
-          <h1 className="text-h1 text-text-primary">Check your email</h1>
-          <p className="mt-2 text-body-sm text-text-muted">
-            We sent a verification link to <span className="font-medium text-text-primary">{registeredEmail}</span>.
-            Click it to activate your account, then log in.
-          </p>
-          {error && (
-            <p key={errorKey} role="alert" className="mt-3 text-body-sm text-error animate-fade-in">
-              {error}
-            </p>
-          )}
-          <div className="mt-6 space-y-2">
-            <Button href="/login" size="lg" className="w-full">Go to login</Button>
-            <button type="button" onClick={handleResend} className="text-body-sm text-primary hover:underline">
-              Didn&apos;t get it? Resend link
-            </button>
-          </div>
-        </div>
-      </div>
-    );
   }
 
   return (

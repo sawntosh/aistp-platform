@@ -1,11 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/router";
 import Link from "next/link";
-import { Check, KeyRound, MailX, ShieldCheck } from "lucide-react";
-import { confirmPasswordReset } from "../services/authService";
+import { Check, KeyRound, ShieldCheck } from "lucide-react";
+import { confirmPasswordReset, requestPasswordReset } from "../services/authService";
 import { getErrorMessage } from "../services/apiClient";
 import PasswordInput from "../components/PasswordInput";
-import { Label } from "../components/ui/Input";
+import Input, { Label } from "../components/ui/Input";
 import Button from "../components/ui/Button";
 import { cn } from "../lib/cn";
 
@@ -18,6 +18,8 @@ const STRENGTH_LEVELS = [
 ];
 
 const MIN_PASSWORD_LENGTH = 8;
+const GMAIL_REGEX = /^(?=[A-Za-z0-9.]*[A-Za-z])[A-Za-z0-9.]+@gmail\.com$/i;
+const RESEND_COOLDOWN_SECONDS = 60;
 
 function getPasswordStrength(password) {
   if (!password) return null;
@@ -47,19 +49,33 @@ function passwordPolicyError(password) {
 
 export default function ResetPasswordPage() {
   const router = useRouter();
-  const [token, setToken] = useState(null); // null = still reading the URL
+  const [email, setEmail] = useState("");
+  const [code, setCode] = useState("");
   const [form, setForm] = useState({ password: "", confirmPassword: "" });
   const [error, setError] = useState("");
   const [errorKey, setErrorKey] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [done, setDone] = useState(false);
+  const [resendNote, setResendNote] = useState("");
+  const [cooldown, setCooldown] = useState(0);
+  const prefilled = useRef(false);
 
   useEffect(() => {
-    if (!router.isReady) return;
-    const t = router.query.token;
-    setToken(typeof t === "string" && t ? t : "");
-  }, [router.isReady, router.query.token]);
+    if (!router.isReady || prefilled.current) return;
+    prefilled.current = true;
+    const q = router.query.email;
+    if (typeof q === "string") setEmail(q);
+  }, [router.isReady, router.query.email]);
 
+  useEffect(() => {
+    if (cooldown <= 0) return undefined;
+    const t = setTimeout(() => setCooldown((s) => s - 1), 1000);
+    return () => clearTimeout(t);
+  }, [cooldown]);
+
+  const trimmedEmail = email.trim();
+  const emailValid = GMAIL_REGEX.test(trimmedEmail);
+  const codeValid = /^\d{6}$/.test(code);
   const strength = getPasswordStrength(form.password);
   const pwPolicyError = passwordPolicyError(form.password);
   const passwordsMatch =
@@ -69,6 +85,8 @@ export default function ResetPasswordPage() {
 
   const blockSubmit =
     isSubmitting ||
+    !emailValid ||
+    !codeValid ||
     !form.password ||
     !form.confirmPassword ||
     Boolean(pwPolicyError) ||
@@ -86,6 +104,14 @@ export default function ResetPasswordPage() {
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
+    if (!emailValid) {
+      showError("Enter the Gmail address you registered with.");
+      return;
+    }
+    if (!codeValid) {
+      showError("Enter the 6-digit code from your email.");
+      return;
+    }
     if (pwPolicyError) {
       showError(pwPolicyError);
       return;
@@ -97,7 +123,8 @@ export default function ResetPasswordPage() {
     setIsSubmitting(true);
     try {
       await confirmPasswordReset({
-        token,
+        email: trimmedEmail,
+        code,
         password: form.password,
         confirmPassword: form.confirmPassword,
       });
@@ -106,7 +133,7 @@ export default function ResetPasswordPage() {
       showError(
         getErrorMessage(
           err,
-          "This reset link is invalid or has expired. Request a new one."
+          "That code is incorrect or has expired. Request a new one."
         )
       );
     } finally {
@@ -114,13 +141,20 @@ export default function ResetPasswordPage() {
     }
   }
 
-  // -- states -----------------------------------------------------------
-  if (token === null) {
-    return (
-      <div className="flex min-h-screen w-full items-center justify-center bg-background px-4 py-12">
-        <p className="text-body-sm text-text-muted">Loading…</p>
-      </div>
-    );
+  async function handleResend() {
+    setResendNote("");
+    setError("");
+    if (!emailValid) {
+      showError("Enter the Gmail address you registered with first.");
+      return;
+    }
+    setCooldown(RESEND_COOLDOWN_SECONDS);
+    try {
+      await requestPasswordReset(trimmedEmail);
+      setResendNote("If an account exists for that email, a new code is on its way.");
+    } catch {
+      setResendNote("Couldn't send right now. Try again in a moment.");
+    }
   }
 
   const shell = (children) => (
@@ -130,23 +164,6 @@ export default function ResetPasswordPage() {
       </div>
     </div>
   );
-
-  if (!token) {
-    return shell(
-      <div className="text-center">
-        <span className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-error-muted text-error">
-          <MailX className="h-6 w-6" aria-hidden="true" />
-        </span>
-        <h1 className="text-h1 text-text-primary">Link is missing its token</h1>
-        <p className="mt-2 text-body-sm text-text-muted">
-          Open the most recent reset link from your email, or request a new one.
-        </p>
-        <Button href="/forgot-password" size="lg" className="mt-6 w-full">
-          Request a new link
-        </Button>
-      </div>
-    );
-  }
 
   if (done) {
     return shell(
@@ -173,11 +190,39 @@ export default function ResetPasswordPage() {
         </span>
         <h1 className="text-h1 text-text-primary">Choose a new password</h1>
         <p className="mt-1 text-body-sm text-text-muted">
-          8+ characters with an uppercase letter, a digit and a symbol.
+          Enter the 6-digit code we emailed you, then your new password.
         </p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+        <div>
+          <Label htmlFor="email">Email</Label>
+          <Input
+            id="email"
+            name="email"
+            type="email"
+            required
+            autoComplete="email"
+            placeholder="name123@gmail.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+        </div>
+
+        <div>
+          <Label htmlFor="code">Reset code</Label>
+          <Input
+            id="code"
+            name="code"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            maxLength={6}
+            placeholder="123456"
+            value={code}
+            onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+          />
+        </div>
+
         <div>
           <Label htmlFor="password">New password</Label>
           <PasswordInput
@@ -248,6 +293,20 @@ export default function ResetPasswordPage() {
           {isSubmitting ? "Resetting…" : "Reset password"}
         </Button>
       </form>
+
+      <div className="mt-4 text-center">
+        <button
+          type="button"
+          onClick={handleResend}
+          disabled={cooldown > 0}
+          className="text-body-sm font-medium text-primary hover:underline disabled:opacity-50 disabled:no-underline"
+        >
+          {cooldown > 0 ? `Resend code in ${cooldown}s` : "Resend code"}
+        </button>
+        {resendNote && (
+          <p className="mt-1 text-caption text-text-muted animate-fade-in">{resendNote}</p>
+        )}
+      </div>
 
       <p className="mt-4 text-center text-body-sm text-text-muted">
         <Link href="/login" className="font-medium text-primary hover:underline">

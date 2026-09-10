@@ -190,13 +190,22 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-# -- Email (verification links) -------------------------------------------
-# Console backend by default: the verification URL is printed to the
-# runserver terminal, no SMTP needed. Set EMAIL_HOST in the environment to
-# switch to real SMTP (e.g. smtp.gmail.com with a Google App Password).
-EMAIL_HOST = os.getenv("EMAIL_HOST", "")
-if EMAIL_HOST:
+# -- Email delivery -----------------------------------------------------
+# EMAIL_PROVIDER selects the transport for the verification / password-
+# reset codes:
+#   console   (default) -- the message is printed to the runserver
+#             terminal; no credentials needed, handy for local dev / CI.
+#   smtp      -- Django's SMTP backend (set EMAIL_HOST etc., e.g.
+#             smtp.gmail.com with a Google App Password).
+#   gmail_api -- Gmail API via an OAuth2 refresh token
+#             (accounts.gmail_backend.GmailAPIEmailBackend). Get the
+#             refresh token once with backend/scripts/gmail_oauth_setup.py.
+EMAIL_PROVIDER = os.getenv("EMAIL_PROVIDER", "console").lower()
+if EMAIL_PROVIDER == "gmail_api":
+    EMAIL_BACKEND = "accounts.gmail_backend.GmailAPIEmailBackend"
+elif EMAIL_PROVIDER == "smtp":
     EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+    EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.gmail.com")
     EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
     EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
     EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
@@ -204,18 +213,24 @@ if EMAIL_HOST:
 else:
     EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
-DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "AISTP <no-reply@aistp.local>")
+# Gmail API backend credentials (only read when EMAIL_PROVIDER=gmail_api).
+GMAIL_OAUTH_CLIENT_ID = os.getenv("GMAIL_OAUTH_CLIENT_ID", "")
+GMAIL_OAUTH_CLIENT_SECRET = os.getenv("GMAIL_OAUTH_CLIENT_SECRET", "")
+GMAIL_OAUTH_REFRESH_TOKEN = os.getenv("GMAIL_OAUTH_REFRESH_TOKEN", "")
+GMAIL_SENDER = os.getenv("GMAIL_SENDER", "")
 
-# Where the emailed verification link points (the frontend route that
-# reads ?token= and POSTs it to /api/auth/verify-email/).
+DEFAULT_FROM_EMAIL = os.getenv(
+    "DEFAULT_FROM_EMAIL", GMAIL_SENDER or "AISTP <no-reply@aistp.local>"
+)
+
+# Base URL of the frontend (used for links in transactional email, if any).
 FRONTEND_BASE_URL = os.getenv("FRONTEND_BASE_URL", "http://localhost:3000")
 
-# Signed email-verification token lifetime.
-EMAIL_VERIFICATION_MAX_AGE = int(os.getenv("EMAIL_VERIFICATION_MAX_AGE", str(3 * 24 * 3600)))
-
-# Signed password-reset token lifetime. Much shorter than verification --
-# a reset link grants account access, so it shouldn't linger in an inbox.
-PASSWORD_RESET_MAX_AGE = int(os.getenv("PASSWORD_RESET_MAX_AGE", str(3600)))
+# -- Email one-time codes (verification + password reset) --------------
+# accounts.models.EmailOTP / accounts.emails
+EMAIL_OTP_MAX_AGE = int(os.getenv("EMAIL_OTP_MAX_AGE", "600"))          # 10 min
+EMAIL_OTP_MAX_ATTEMPTS = int(os.getenv("EMAIL_OTP_MAX_ATTEMPTS", "5"))
+EMAIL_OTP_RESEND_COOLDOWN = int(os.getenv("EMAIL_OTP_RESEND_COOLDOWN", "60"))
 
 # -- Login lockout (on top of the 20/min scoped rate throttle) -----------
 # N consecutive failed logins for the same (username, IP) -> the pair is

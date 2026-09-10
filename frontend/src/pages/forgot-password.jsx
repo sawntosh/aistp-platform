@@ -1,6 +1,7 @@
 import { useState } from "react";
+import { useRouter } from "next/router";
 import Link from "next/link";
-import { ArrowLeft, KeyRound, MailCheck } from "lucide-react";
+import { ArrowLeft, KeyRound } from "lucide-react";
 import { requestPasswordReset } from "../services/authService";
 import Input, { Label } from "../components/ui/Input";
 import Button from "../components/ui/Button";
@@ -11,8 +12,8 @@ import Button from "../components/ui/Button";
 const GMAIL_REGEX = /^(?=[A-Za-z0-9.]*[A-Za-z])[A-Za-z0-9.]+@gmail\.com$/i;
 
 export default function ForgotPasswordPage() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
-  const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -29,12 +30,12 @@ export default function ForgotPasswordPage() {
     setIsSubmitting(true);
     try {
       // Always succeeds with a generic message -- the response is the same
-      // whether or not the address is registered.
+      // whether or not the address is registered. Move straight to the code
+      // + new-password step.
       await requestPasswordReset(trimmed);
-      setSent(true);
+      router.push(`/reset-password?email=${encodeURIComponent(trimmed)}`);
     } catch {
       setError("Couldn't send the reset email right now. Try again in a moment.");
-    } finally {
       setIsSubmitting(false);
     }
   }
@@ -50,33 +51,14 @@ export default function ForgotPasswordPage() {
       </Link>
 
       <div className="w-full max-w-sm rounded-lg border border-border bg-surface p-8 shadow-sm">
-        {sent ? (
-          <div className="text-center">
-            <span className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-success-muted text-success">
-              <MailCheck className="h-6 w-6" aria-hidden="true" />
-            </span>
-            <h1 className="text-h1 text-text-primary">Check your email</h1>
-            <p className="mt-2 text-body-sm text-text-muted">
-              If an account exists for{" "}
-              <span className="font-medium text-text-primary">{trimmed}</span>, a
-              password reset link is on its way. The link expires in an hour.
-            </p>
-            <p className="mt-4 text-caption text-text-muted">
-              In local dev the link is printed to the backend console.
-            </p>
-            <Button href="/login" size="lg" className="mt-6 w-full">
-              Back to login
-            </Button>
-          </div>
-        ) : (
-          <>
+        <>
             <div className="mb-6 flex flex-col items-center text-center">
               <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-primary-muted text-primary">
                 <KeyRound className="h-6 w-6" aria-hidden="true" />
               </span>
               <h1 className="text-h1 text-text-primary">Forgot your password?</h1>
               <p className="mt-1 text-body-sm text-text-muted">
-                Enter your email and we&apos;ll send you a reset link.
+                Enter your email and we&apos;ll send you a 6-digit reset code.
               </p>
             </div>
 
@@ -114,7 +96,7 @@ export default function ForgotPasswordPage() {
                 disabled={isSubmitting || !trimmed || emailInvalid}
                 className="w-full"
               >
-                {isSubmitting ? "Sending…" : "Send reset link"}
+                {isSubmitting ? "Sending…" : "Send reset code"}
               </Button>
             </form>
 
@@ -124,8 +106,7 @@ export default function ForgotPasswordPage() {
                 Log in
               </Link>
             </p>
-          </>
-        )}
+        </>
       </div>
     </div>
   );
