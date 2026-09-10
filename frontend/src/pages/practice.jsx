@@ -1122,13 +1122,14 @@ export default function PracticePage() {
           </div>
 
           <div className="min-w-0 space-y-6">
-            {pageQuestions.map((question) => {
+            {pageQuestions.map((question, i) => {
               const submitted = submittedIds.has(question.id);
               const result = resultsById[question.id] ?? null;
               return (
                 <div key={question.id} className="animate-fade-in">
                   <QuestionCard
                     question={question}
+                    questionNumber={pageStart + i + 1}
                     answer={answersById[question.id] ?? null}
                     onAnswerChange={(next) => handleAnswerChange(question.id, next)}
                     onSubmit={() => handleSubmit(question.id)}
