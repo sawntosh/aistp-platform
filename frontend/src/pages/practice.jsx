@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/router";
-import { AlertTriangle, ArrowRight, Brain, Check, CircleSlash, ClipboardCheck, FolderKanban, GraduationCap, Lightbulb, Puzzle, RefreshCw, Search, Sliders, Target, Wrench, X } from "lucide-react";
+import { AlertTriangle, ArrowRight, Award, Brain, Check, CircleSlash, ClipboardCheck, Download, FolderKanban, GraduationCap, Lightbulb, Puzzle, RefreshCw, Search, Sliders, Target, Wrench, X } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { usePracticeSession } from "../context/PracticeSessionContext";
 import {
@@ -11,6 +11,11 @@ import {
   submitAnswer,
 } from "../services/questionsService";
 import { fetchDashboardAnalytics } from "../services/analyticsService";
+import {
+  claimCertificate,
+  fetchMyCertificates,
+  certificatePdfUrl,
+} from "../services/certificatesService";
 import QuestionCard from "../components/QuestionCard";
 import FeedbackPanel from "../components/FeedbackPanel";
 import ConfirmModal from "../components/ConfirmModal";
@@ -134,6 +139,11 @@ export default function PracticePage() {
   // Submit again without answering) does the real submit confirmation open.
   const [skipNoticeOpen, setSkipNoticeOpen] = useState(false);
   const [skipsAcknowledged, setSkipsAcknowledged] = useState(false);
+
+  // Certificate (Real Exam, passed): claim it. The name is the username.
+  const [claimedCert, setClaimedCert] = useState(null);
+  const [claimingCert, setClaimingCert] = useState(false);
+  const [claimError, setClaimError] = useState("");
 
   // Domains are public, so even guests browsing before login see real names.
   useEffect(() => {
@@ -444,6 +454,31 @@ export default function PracticePage() {
     setIsSessionComplete(true);
   }
 
+  // On the Real Exam results screen: check whether this session already
+  // has a certificate.
+  useEffect(() => {
+    if (!isSessionComplete || mode !== "test") return;
+    fetchMyCertificates()
+      .then((list) => {
+        const match = list.find((c) => c.session === sessionId);
+        if (match) setClaimedCert(match);
+      })
+      .catch(() => {});
+  }, [isSessionComplete, mode, sessionId]);
+
+  async function handleClaimCertificate() {
+    setClaimingCert(true);
+    setClaimError("");
+    try {
+      const cert = await claimCertificate({ sessionId });
+      setClaimedCert(cert);
+    } catch (err) {
+      setClaimError(err?.body?.detail || "Couldn't create your certificate. Try again.");
+    } finally {
+      setClaimingCert(false);
+    }
+  }
+
   if (isAuthLoading) return null;
 
   if (!sessionStarted) {
@@ -662,8 +697,13 @@ export default function PracticePage() {
 
   if (isSessionComplete) {
     const isExam = isExamLike;
-    const scoreValue = finalScore ?? correctCount;
-    const scorePercent = totalCount ? Math.round((scoreValue / totalCount) * 100) : 0;
+    // Real Exam / Mock withhold correctness during the session, so `correctCount`
+    // stays 0 -- trust the finished session's score (from the review payload,
+    // falling back to the finish response) instead.
+    const total = (isExam && testReview?.question_count) || totalCount;
+    const scoreValue =
+      (isExam ? testReview?.score : null) ?? finalScore ?? correctCount;
+    const scorePercent = total ? Math.round((scoreValue / total) * 100) : 0;
     const scoreTone = scorePercent >= 70 ? "text-success" : scorePercent >= 40 ? "text-warning" : "text-error";
     const examPassed = scorePercent >= EXAM_PASS_PERCENT;
     const resultsTitle = isMock ? "ISTQB Mock Test results" : isExam ? "Exam results" : "Session complete";
@@ -671,7 +711,7 @@ export default function PracticePage() {
       testReview?.skipped_count ??
       testReview?.results?.filter((r) => r.skipped).length ??
       0;
-    const incorrectCount = Math.max(totalCount - scoreValue - skippedCount, 0);
+    const incorrectCount = Math.max(total - scoreValue - skippedCount, 0);
 
     return (
       <div className="min-h-[calc(100vh-57px)] sm:min-h-screen bg-background px-4 py-10 sm:px-6">
@@ -689,7 +729,7 @@ export default function PracticePage() {
               </p>
             )}
             <p className={cn("mb-1 text-3xl font-semibold", scoreTone)}>
-              {scoreValue} / {totalCount}
+              {scoreValue} / {total}
             </p>
             <p className="mb-4 text-body-sm text-text-muted">
               {scorePercent}% correct
@@ -717,6 +757,84 @@ export default function PracticePage() {
               {isMock ? "Start another mock test" : isExam ? "Start another exam" : "Start another session"}
             </Button>
           </Card>
+
+          {isExam && !isMock && (
+            <Card className="p-6">
+              {!examPassed ? (
+                <div className="flex items-center gap-3">
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-surface-muted text-text-muted">
+                    <Award className="h-5 w-5" aria-hidden="true" />
+                  </span>
+                  <div>
+                    <p className="text-body-sm font-semibold text-text-primary">
+                      No certificate this time
+                    </p>
+                    <p className="text-caption text-text-muted">
+                      Score {EXAM_PASS_PERCENT}% or higher on a Real Exam to earn your
+                      AISTP certificate. You reached {scorePercent}%.
+                    </p>
+                  </div>
+                </div>
+              ) : claimedCert ? (
+                <div className="flex flex-col items-center gap-3 text-center sm:flex-row sm:text-left">
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-test-muted text-test">
+                    <Award className="h-5 w-5" aria-hidden="true" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-body-sm font-semibold text-text-primary">
+                      Your certificate is ready
+                    </p>
+                    <p className="text-caption text-text-muted">
+                      Issued to {claimedCert.recipient_name} · ID {claimedCert.certificate_id}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap justify-center gap-2">
+                    <Button
+                      href={`/certificate/${claimedCert.certificate_id}`}
+                      tone="test"
+                      size="sm"
+                    >
+                      View certificate
+                    </Button>
+                    <Button
+                      href={certificatePdfUrl(claimedCert.certificate_id, { download: true })}
+                      variant="outline"
+                      size="sm"
+                    >
+                      <Download className="h-4 w-4" aria-hidden="true" />
+                      PDF
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <div className="flex flex-col items-center gap-3 text-center sm:flex-row sm:text-left">
+                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-test-muted text-test">
+                      <Award className="h-5 w-5" aria-hidden="true" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-body-sm font-semibold text-text-primary">
+                        You passed — claim your certificate
+                      </p>
+                      <p className="text-caption text-text-muted">
+                        It will be issued to {user?.username}.
+                      </p>
+                    </div>
+                    <Button
+                      tone="test"
+                      onClick={handleClaimCertificate}
+                      isLoading={claimingCert}
+                    >
+                      Get your certificate
+                    </Button>
+                  </div>
+                  {claimError && (
+                    <p className="mt-3 text-caption text-error">{claimError}</p>
+                  )}
+                </div>
+              )}
+            </Card>
+          )}
 
           {isExam && testReview && (
             <div className="space-y-4">
