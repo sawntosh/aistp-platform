@@ -150,7 +150,9 @@ class StudyTopicStartView(APIView):
                 "session_id": session.id,
                 "topic": {"id": topic.id, "title": topic.title, "description": topic.description, "domain_id": topic.domain_id},
                 "content": StudyContentSerializer(content).data if content else None,
-                "questions": QuestionPublicSerializer(questions, many=True).data,
+                "questions": QuestionPublicSerializer(
+                    questions, many=True, context={"request": request}
+                ).data,
             }
         )
 

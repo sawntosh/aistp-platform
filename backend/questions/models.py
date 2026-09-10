@@ -82,6 +82,11 @@ class Question(models.Model):
     learning_objective_id = models.CharField(max_length=20, blank=True, default="")
     learning_objective = models.CharField(max_length=255, blank=True, default="")
     source_section = models.CharField(max_length=255, blank=True, default="")
+    # FR-06: an optional diagram / screenshot shown with the question in
+    # every mode (Practice, Test, Mock, Study). Admin-managed only -- set
+    # via the admin question form's image picker; RAG generation and the
+    # bulk JSON import never touch it.
+    image = models.ImageField(upload_to="question_images/", null=True, blank=True)
     is_active = models.BooleanField(default=True)  # FR-06: admin can deactivate
     created_at = models.DateTimeField(auto_now_add=True)
 
