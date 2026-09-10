@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
+import Link from "next/link";
+import { Award } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { fetchDashboardAnalytics } from "../services/analyticsService";
+import { fetchMyCertificates } from "../services/certificatesService";
 import { useCountUp } from "../hooks/useCountUp";
 import AccuracyRing from "../components/AccuracyRing";
 import DomainAccuracyBars from "../components/DomainAccuracyBars";
@@ -63,6 +66,7 @@ export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [sessionLimit, setSessionLimit] = useState(10);
+  const [certificates, setCertificates] = useState([]);
 
   useEffect(() => {
     if (!isAuthLoading && !user) {
@@ -82,6 +86,9 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!user) return;
     loadAnalytics();
+    fetchMyCertificates()
+      .then(setCertificates)
+      .catch(() => setCertificates([]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
@@ -142,6 +149,46 @@ export default function DashboardPage() {
             href="/practice"
           />
         </div>
+
+        {certificates.length > 0 && (
+          <div className="mb-10">
+            <SectionHeader
+              title="Your certificates"
+              description="Earned by passing a Real Exam at 65% or above"
+              className="mb-4"
+            />
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {certificates.map((cert) => (
+                <Link
+                  key={cert.certificate_id}
+                  href={`/certificate/${cert.certificate_id}`}
+                  className="group flex items-center gap-4 rounded-lg border border-border bg-surface p-4 transition-colors hover:border-test/40 hover:bg-test-muted/30"
+                >
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-test-muted text-test">
+                    <Award className="h-5 w-5" aria-hidden="true" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="truncate text-body-sm font-semibold text-text-primary">
+                      {cert.exam_label}
+                    </p>
+                    <p className="text-caption text-text-muted">
+                      {cert.score_percent}% ·{" "}
+                      {new Date(cert.issued_at).toLocaleDateString(undefined, {
+                        year: "numeric",
+                        month: "short",
+                        day: "numeric",
+                      })}{" "}
+                      · {cert.certificate_id}
+                    </p>
+                  </div>
+                  <span className="ml-auto text-caption font-medium text-test opacity-0 transition-opacity group-hover:opacity-100">
+                    View →
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
 
         {isLoading ? (
           <div className="space-y-6">

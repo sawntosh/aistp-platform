@@ -51,6 +51,7 @@ INSTALLED_APPS = [
     'explanations',
     'analytics',
     'study',
+    'certificates',
 ]
 
 MIDDLEWARE = [

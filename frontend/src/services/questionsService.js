@@ -28,8 +28,11 @@ export async function finishSession(sessionId) {
 
 // Test Mode only: the full per-question reveal (correct answers +
 // what the learner submitted) for a session that has already finished.
-export async function fetchSessionReview(sessionId) {
-  return apiFetch(`/questions/sessions/${sessionId}/review/`);
+// `questionIds` is the ordered list of questions the session served, so
+// the review can include the ones that were skipped (never answered).
+export async function fetchSessionReview(sessionId, questionIds = []) {
+  const query = questionIds.length ? `?questions=${questionIds.join(",")}` : "";
+  return apiFetch(`/questions/sessions/${sessionId}/review/${query}`);
 }
 
 // -- Admin: domains --------------------------------------------------------
