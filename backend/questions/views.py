@@ -20,7 +20,7 @@ from rest_framework.views import APIView
 
 from accounts.permissions import IsAdminRole
 from services.answer_reveal_service import build_reveal_payload
-from services.analytics_service import record_attempt
+from services.analytics_service import record_attempt, revise_attempt_correctness
 from services.question_generation_service import run_generation
 from services.scoring_service import score_answer
 
@@ -349,12 +349,12 @@ class AnswerSubmitView(APIView):
                 {"detail": "This session is already finished; no more answers can be submitted."},
                 status=status.HTTP_409_CONFLICT,
             )
-        if Attempt.objects.filter(session=session, question=question).exists():
-            return Response(
-                {"detail": "This question has already been answered in this session."},
-                status=status.HTTP_409_CONFLICT,
-            )
-        if session.attempts.count() >= session.question_count:
+        # Re-submitting a question that already has an Attempt *edits* that
+        # answer in place (the learner pressed "Change answer" before
+        # finishing the exam). Only a genuinely new answer has to fit inside
+        # the number of questions the session served.
+        existing_attempt = Attempt.objects.filter(session=session, question=question).first()
+        if existing_attempt is None and session.attempts.count() >= session.question_count:
             return Response(
                 {"detail": "This session already has an answer for every question."},
                 status=status.HTTP_409_CONFLICT,
@@ -413,24 +413,41 @@ class AnswerSubmitView(APIView):
 
         is_correct = score_answer(question, submission)
 
-        attempt = Attempt.objects.create(
-            session=session,
-            user=request.user,
-            question=question,
-            is_correct=is_correct,
-            confidence=confidence,
-            **attempt_fields,
-        )
-        if selected_options is not None:
-            attempt.selected_options.set(selected_options)
+        if existing_attempt is not None:
+            was_correct = existing_attempt.is_correct
+            for field, value in attempt_fields.items():
+                setattr(existing_attempt, field, value)
+            existing_attempt.is_correct = is_correct
+            existing_attempt.confidence = confidence
+            existing_attempt.save()
+            if selected_options is not None:
+                existing_attempt.selected_options.set(selected_options)
+            attempt = existing_attempt
+            if session.mode == PracticeSession.Mode.TEST:
+                # Keep the per-domain running total honest after an edit
+                # (total_count unchanged, correct_count shifts by the delta).
+                revise_attempt_correctness(
+                    request.user, question.domain, was_correct, is_correct
+                )
+        else:
+            attempt = Attempt.objects.create(
+                session=session,
+                user=request.user,
+                question=question,
+                is_correct=is_correct,
+                confidence=confidence,
+                **attempt_fields,
+            )
+            if selected_options is not None:
+                attempt.selected_options.set(selected_options)
 
-        if session.mode == PracticeSession.Mode.TEST:
-            # Only Test Mode moves the learner's tracked performance
-            # analytics (FR-05/FR-07). Practice Mode is low-stakes
-            # rehearsal, and the ISTQB Mock Test is a self-contained exam
-            # -- both are deliberately kept out of the per-domain accuracy
-            # aggregates.
-            record_attempt(request.user, question.domain, is_correct)
+            if session.mode == PracticeSession.Mode.TEST:
+                # Only Test Mode moves the learner's tracked performance
+                # analytics (FR-05/FR-07). Practice Mode is low-stakes
+                # rehearsal, and the ISTQB Mock Test is a self-contained exam
+                # -- both are deliberately kept out of the per-domain accuracy
+                # aggregates.
+                record_attempt(request.user, question.domain, is_correct)
 
         if session.mode in (PracticeSession.Mode.TEST, PracticeSession.Mode.MOCK):
             # Exam simulation (Real Exam and ISTQB Mock Test): don't leak

@@ -256,6 +256,26 @@ export default function PracticePage() {
   function goToQuestion(index) {
     setCurrentPage(Math.floor(index / PER_PAGE));
     setLoadError("");
+    if (typeof window !== "undefined") {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }
+
+  // Exam only: unlock a saved answer so it can be changed and re-submitted.
+  function handleEditAnswer(questionId) {
+    setSubmittedIds((prev) => {
+      if (!prev.has(questionId)) return prev;
+      const next = new Set(prev);
+      next.delete(questionId);
+      return next;
+    });
+    setResultsById((prev) => {
+      if (!prev[questionId]) return prev;
+      const next = { ...prev };
+      delete next[questionId];
+      return next;
+    });
+    setLoadError("");
   }
 
   function handleAnswerChange(questionId, nextAnswer) {
@@ -820,6 +840,7 @@ export default function PracticePage() {
                 answer={answersById[question.id] ?? null}
                 onAnswerChange={(next) => handleAnswerChange(question.id, next)}
                 onSubmit={() => handleSubmit(question.id)}
+                onEdit={isExamLike ? () => handleEditAnswer(question.id) : undefined}
                 canSkip={false}
                 isAnswered={submitted}
                 isSubmitting={submittingId === question.id}
