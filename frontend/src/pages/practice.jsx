@@ -156,6 +156,9 @@ export default function PracticePage() {
   // Display-only elapsed time since the session's questions loaded. Not a
   // limit: it never auto-submits or changes scoring.
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  // The single question the navigator highlights -- the last one the
+  // learner navigated to (0-based index into `questions`).
+  const [currentIndex, setCurrentIndex] = useState(0);
 
   // Certificate (Real Exam, passed): claim it. The name is the username.
   const [claimedCert, setClaimedCert] = useState(null);
@@ -263,6 +266,7 @@ export default function PracticePage() {
       setQuestions(data.questions);
       setTotalCount(data.questions.length);
       setCurrentPage(0);
+      setCurrentIndex(0);
       setSessionId(data.session_id);
       setAnswersById({});
       setConfidenceById({});
@@ -320,6 +324,7 @@ export default function PracticePage() {
     const target = questions[index];
     if (!target) return;
     setLoadError("");
+    setCurrentIndex(index);
     const targetPage = Math.floor(index / PER_PAGE);
     if (targetPage === currentPage) {
       scrollToQuestion(target.id);
@@ -1017,7 +1022,9 @@ export default function PracticePage() {
   const modeLabel = isMock ? "ISTQB Mock Test" : mode === "test" ? "Real Exam" : "Practice Mode";
 
   function goToPage(nextPage) {
-    setCurrentPage(Math.max(0, Math.min(pageCount - 1, nextPage)));
+    const clamped = Math.max(0, Math.min(pageCount - 1, nextPage));
+    setCurrentPage(clamped);
+    setCurrentIndex(clamped * PER_PAGE);
     setLoadError("");
     if (typeof window !== "undefined") {
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -1199,8 +1206,7 @@ export default function PracticePage() {
           <div className="xl:sticky xl:top-[104px]">
             <QuestionNavigator
               questions={questions}
-              activeStart={pageStart}
-              activeCount={PER_PAGE}
+              currentIndex={currentIndex}
               submittedIds={submittedIds}
               flaggedIds={flaggedIds}
               results={mode === "practice" ? resultsById : null}

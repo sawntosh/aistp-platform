@@ -16,9 +16,8 @@ function cellClasses({ current, answered, correct, incorrect }) {
 
 export default function QuestionNavigator({
   questions,
-  // The questions currently on screen: [activeStart, activeStart + activeCount).
-  activeStart = 0,
-  activeCount = 1,
+  // Index of the single question to highlight (last one navigated to).
+  currentIndex = 0,
   submittedIds,
   flaggedIds,
   results = null,
@@ -35,7 +34,7 @@ export default function QuestionNavigator({
 
       <div className="grid grid-cols-8 gap-1.5 sm:grid-cols-10 xl:grid-cols-5">
         {questions.map((q, index) => {
-          const current = index >= activeStart && index < activeStart + activeCount;
+          const current = index === currentIndex;
           const answered = submittedIds.has(q.id);
           const flagged = flaggedIds?.has(q.id);
           const outcome = showOutcome ? results[q.id] : null;
@@ -54,7 +53,7 @@ export default function QuestionNavigator({
               className={cn(
                 "relative flex h-9 items-center justify-center rounded-md border text-caption font-semibold tabular-nums transition-colors",
                 cellClasses({ current, answered, correct, incorrect }),
-                current && activeCount === 1 && "ring-2 ring-test/40 ring-offset-1 ring-offset-surface"
+                current && "ring-2 ring-test/40 ring-offset-1 ring-offset-surface"
               )}
             >
               {index + 1}
