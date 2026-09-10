@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/router";
-import { AlertTriangle, ArrowRight, Award, Brain, Check, ChevronLeft, ChevronRight, CircleSlash, ClipboardCheck, Clock, Download, Flag, FolderKanban, GraduationCap, Lightbulb, Puzzle, RefreshCw, Search, Sliders, Target, Wrench, X } from "lucide-react";
+import { AlertTriangle, ArrowRight, Award, Brain, Check, CircleSlash, ClipboardCheck, Clock, Download, FolderKanban, GraduationCap, Lightbulb, Puzzle, RefreshCw, Search, Sliders, Target, Wrench, X } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { usePracticeSession } from "../context/PracticeSessionContext";
 import {
@@ -20,6 +20,7 @@ import QuestionCard from "../components/QuestionCard";
 import FeedbackPanel from "../components/FeedbackPanel";
 import QuestionNavigator from "../components/question/QuestionNavigator";
 import AiExplainPanel from "../components/question/AiExplainPanel";
+import Pagination from "../components/question/Pagination";
 import ConfirmModal from "../components/ConfirmModal";
 import WeakestDomainsPanel from "../components/WeakestDomainsPanel";
 import Alert from "../components/ui/Alert";
@@ -114,11 +115,11 @@ export default function PracticePage() {
   const [domainAccuracy, setDomainAccuracy] = useState(null);
   const [analyticsStatus, setAnalyticsStatus] = useState("guest"); // guest | loading | ready
 
-  // The full ordered question list for the session. One question shows at
-  // a time; the learner moves with Previous / Next or the navigator, and
-  // per-question answer / result / submitted state lives in the *ById
-  // maps keyed by question id so nothing is lost on navigation.
-  const PER_PAGE = 1;
+  // The full ordered question list for the session. PER_PAGE questions
+  // show at once and the learner pages through them (or jumps via the
+  // navigator); per-question answer / result / submitted state lives in
+  // the *ById maps keyed by question id so nothing is lost on navigation.
+  const PER_PAGE = 5;
   const [questions, setQuestions] = useState([]);
   const [currentPage, setCurrentPage] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
@@ -298,6 +299,9 @@ export default function PracticePage() {
   }
 
   const pageCount = Math.max(1, Math.ceil(questions.length / PER_PAGE));
+  const pageStart = currentPage * PER_PAGE;
+  const pageQuestions = questions.slice(pageStart, pageStart + PER_PAGE);
+  const pageEnd = Math.min(pageStart + PER_PAGE, questions.length);
   const answeredCount = submittedIds.size;
   const allAnswered = questions.length > 0 && answeredCount === questions.length;
 
@@ -985,13 +989,16 @@ export default function PracticePage() {
   const unansweredCount = totalCount - answeredCount;
   const isLastPage = currentPage >= pageCount - 1;
 
-  const currentQuestion = questions[currentPage] ?? null;
-  const currentId = currentQuestion?.id ?? null;
-  const currentResult = currentId != null ? resultsById[currentId] ?? null : null;
-  const currentSubmitted = currentId != null && submittedIds.has(currentId);
-  const currentFlagged = currentId != null && flaggedIds.has(currentId);
   const ModeIcon = isMock ? GraduationCap : isExamLike ? ClipboardCheck : Target;
   const modeLabel = isMock ? "ISTQB Mock Test" : mode === "test" ? "Real Exam" : "Practice Mode";
+
+  function goToPage(nextPage) {
+    setCurrentPage(Math.max(0, Math.min(pageCount - 1, nextPage)));
+    setLoadError("");
+    if (typeof window !== "undefined") {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }
 
   return (
     <div className="min-h-[calc(100vh-57px)] sm:min-h-screen bg-background">
@@ -1006,7 +1013,8 @@ export default function PracticePage() {
               <div className="min-w-0">
                 <p className="text-caption font-semibold uppercase tracking-wide text-test">{modeLabel}</p>
                 <p className="text-body-sm font-medium text-text-primary">
-                  Question {currentPage + 1} of {totalCount}
+                  Question{pageEnd - pageStart > 1 ? "s" : ""} {pageStart + 1}
+                  {pageEnd - pageStart > 1 ? `–${pageEnd}` : ""} of {totalCount}
                 </p>
               </div>
             </div>
@@ -1091,18 +1099,21 @@ export default function PracticePage() {
           </div>
         )}
 
-        <div
-          className={cn(
-            "grid gap-6 xl:items-start",
-            mode === "practice"
-              ? "xl:grid-cols-[210px_minmax(0,1fr)_340px]"
-              : "xl:grid-cols-[210px_minmax(0,1fr)]"
-          )}
-        >
+        {pageCount > 1 && (
+          <Pagination
+            page={currentPage}
+            pageCount={pageCount}
+            onChange={goToPage}
+            className="mb-5"
+          />
+        )}
+
+        <div className="grid gap-6 xl:grid-cols-[210px_minmax(0,1fr)] xl:items-start">
           <div className="xl:sticky xl:top-[104px]">
             <QuestionNavigator
               questions={questions}
-              currentIndex={currentPage}
+              activeStart={pageStart}
+              activeCount={PER_PAGE}
               submittedIds={submittedIds}
               flaggedIds={flaggedIds}
               results={mode === "practice" ? resultsById : null}
@@ -1110,100 +1121,63 @@ export default function PracticePage() {
             />
           </div>
 
-          <div className="min-w-0">
-            {currentQuestion && (
-              <div key={currentQuestion.id} className="animate-fade-in">
-                <QuestionCard
-                  question={currentQuestion}
-                  answer={answersById[currentQuestion.id] ?? null}
-                  onAnswerChange={(next) => handleAnswerChange(currentQuestion.id, next)}
-                  onSubmit={() => handleSubmit(currentQuestion.id)}
-                  onEdit={isExamLike ? () => handleEditAnswer(currentQuestion.id) : undefined}
-                  canSkip={false}
-                  isAnswered={currentSubmitted}
-                  isSubmitting={submittingId === currentQuestion.id}
-                  result={currentResult}
-                  mode={mode}
-                  hideAdvance
-                  confidenceRequired={mode === "test"}
-                  confidence={confidenceById[currentQuestion.id] ?? null}
-                  onConfidenceChange={(level) => handleConfidenceChange(currentQuestion.id, level)}
-                  flagged={currentFlagged}
-                  onToggleFlag={() => toggleFlag(currentQuestion.id)}
-                />
-
-                {mode === "practice" && currentResult && (
-                  <FeedbackPanel
-                    isCorrect={currentResult.isCorrect}
-                    correctOptionText={currentResult.correctAnswerText}
-                    questionId={currentQuestion.id}
-                    domain={currentQuestion.domain}
-                    hideNext
-                    hideExplain
+          <div className="min-w-0 space-y-6">
+            {pageQuestions.map((question) => {
+              const submitted = submittedIds.has(question.id);
+              const result = resultsById[question.id] ?? null;
+              return (
+                <div key={question.id} className="animate-fade-in">
+                  <QuestionCard
+                    question={question}
+                    answer={answersById[question.id] ?? null}
+                    onAnswerChange={(next) => handleAnswerChange(question.id, next)}
+                    onSubmit={() => handleSubmit(question.id)}
+                    onEdit={isExamLike ? () => handleEditAnswer(question.id) : undefined}
+                    canSkip={false}
+                    isAnswered={submitted}
+                    isSubmitting={submittingId === question.id}
+                    result={result}
+                    mode={mode}
+                    hideAdvance
+                    confidenceRequired={mode === "test"}
+                    confidence={confidenceById[question.id] ?? null}
+                    onConfidenceChange={(level) => handleConfidenceChange(question.id, level)}
+                    flagged={flaggedIds.has(question.id)}
+                    onToggleFlag={() => toggleFlag(question.id)}
                   />
-                )}
-              </div>
-            )}
 
-            {loadError && (
-              <Alert tone="error" className="mt-4">
-                {loadError}
-              </Alert>
-            )}
+                  {mode === "practice" && result && (
+                    <>
+                      <FeedbackPanel
+                        isCorrect={result.isCorrect}
+                        correctOptionText={result.correctAnswerText}
+                        questionId={question.id}
+                        domain={question.domain}
+                        hideNext
+                        hideExplain
+                      />
+                      <AiExplainPanel questionId={question.id} available className="mt-3" />
+                    </>
+                  )}
+                </div>
+              );
+            })}
 
-            <div className="mt-6 flex flex-wrap items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCurrentPage((p) => Math.max(0, p - 1))}
-                disabled={currentPage === 0}
-              >
-                <ChevronLeft className="h-4 w-4" aria-hidden="true" />
-                Previous
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => currentId != null && toggleFlag(currentId)}
-                className={currentFlagged ? "border-warning/40 text-warning hover:bg-warning-muted" : ""}
-              >
-                <Flag className={cn("h-4 w-4", currentFlagged && "fill-current")} aria-hidden="true" />
-                {currentFlagged ? "Flagged" : "Flag question"}
-              </Button>
-              {isExamLike && currentSubmitted && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => currentId != null && handleEditAnswer(currentId)}
-                >
-                  <RefreshCw className="h-4 w-4" aria-hidden="true" />
-                  Change answer
+            {loadError && <Alert tone="error">{loadError}</Alert>}
+
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-5">
+              <Pagination page={currentPage} pageCount={pageCount} onChange={goToPage} />
+              {isLastPage && (
+                <Button tone="test" size="sm" onClick={requestFinish}>
+                  {isMock
+                    ? "Submit mock test"
+                    : mode === "test"
+                      ? "Submit exam"
+                      : "Finish session"}
                 </Button>
               )}
-              <div className="ml-auto">
-                {isLastPage ? (
-                  <Button tone="test" size="sm" onClick={requestFinish}>
-                    {isMock ? "Submit mock test" : mode === "test" ? "Submit exam" : "Finish session"}
-                  </Button>
-                ) : (
-                  <Button
-                    tone="test"
-                    size="sm"
-                    onClick={() => setCurrentPage((p) => Math.min(pageCount - 1, p + 1))}
-                  >
-                    Next question
-                    <ChevronRight className="h-4 w-4" aria-hidden="true" />
-                  </Button>
-                )}
-              </div>
             </div>
           </div>
-
-          {mode === "practice" && currentQuestion && (
-            <div className="xl:sticky xl:top-[104px]">
-              <AiExplainPanel questionId={currentId} available={currentSubmitted} />
-            </div>
-          )}
         </div>
       </div>
 
