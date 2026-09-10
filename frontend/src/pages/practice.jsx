@@ -74,6 +74,22 @@ const EXAM_PASS_PERCENT = 65;
 // length picker still lets a learner run a shorter self-test.
 const MOCK_TEST_LENGTH = 40;
 
+// The Real Exam is a fixed 40-question paper across every domain -- the
+// length picker is hidden for it, matching the official ISTQB CTFL exam.
+const REAL_EXAM_LENGTH = 40;
+
+// Shown on the setup screen once "Real Exam" is picked. Describes how THIS
+// platform runs the exam, echoing the ISTQB CTFL Foundation format.
+const EXAM_INSTRUCTIONS = [
+  "40 questions covering all six CTFL v4.0 domains, in a mix of question types (multiple choice, multiple answer, true/false, fill-in-the-blank and matching).",
+  "1 mark per question, 40 marks total. The pass mark is 65% — 26 out of 40 — the ISTQB CTFL Foundation standard.",
+  "Rate your confidence (1–5) on every answer. It feeds your analytics and never changes your score.",
+  "Answers lock in as you go. Correct answers and explanations stay hidden until you submit the whole exam.",
+  "Unanswered questions are marked incorrect. Attempt every question — there is no penalty for a wrong answer.",
+  "No time limit is enforced here, but the official exam allows 60 minutes (75 for non-native speakers). A timer is shown for reference only.",
+  "Once you submit, answers cannot be changed. Passing earns your AISTP certificate.",
+];
+
 // mm:ss for the display-only elapsed timer.
 function formatDuration(totalSeconds) {
   const m = Math.floor(totalSeconds / 60);
@@ -622,10 +638,14 @@ export default function PracticePage() {
                     onClick={() => {
                       setMode(option.value);
                       // The ISTQB Mock Test defaults to a full 40-question
-                      // paper; the length picker can still shorten it.
+                      // paper (the length picker can still shorten it); the
+                      // Real Exam is locked to 40 with no picker at all.
                       if (option.value === "mock") {
                         setIsCustomLength(false);
                         setSessionLength(MOCK_TEST_LENGTH);
+                      } else if (option.value === "test") {
+                        setIsCustomLength(false);
+                        setSessionLength(REAL_EXAM_LENGTH);
                       }
                     }}
                   >
@@ -677,6 +697,27 @@ export default function PracticePage() {
           </div>
           )}
 
+          {mode === "test" && (
+            <Card className="border-test/25 p-5 animate-fade-in">
+              <h2 className="flex items-center gap-2 text-body-sm font-semibold text-text-primary">
+                <ClipboardCheck className="h-4 w-4 text-test" aria-hidden="true" />
+                Exam instructions
+              </h2>
+              <p className="mt-1 text-caption text-text-muted">
+                Read these before you begin — the Real Exam can&apos;t be paused or restarted.
+              </p>
+              <ul className="mt-3 space-y-2">
+                {EXAM_INSTRUCTIONS.map((line) => (
+                  <li key={line} className="flex gap-2 text-body-sm text-text-secondary">
+                    <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-test" aria-hidden="true" />
+                    <span>{line}</span>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
+
+          {mode !== "test" && (
           <div>
             <h2 className="mb-3 text-label text-text-secondary">Session length</h2>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -729,6 +770,7 @@ export default function PracticePage() {
               </div>
             )}
           </div>
+          )}
 
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-surface-muted px-5 py-4 text-body-sm">
             <div className="flex items-center gap-2 text-text-secondary">
