@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/router";
-import { AlertTriangle, ArrowRight, Award, Brain, Check, CircleSlash, ClipboardCheck, Download, FolderKanban, GraduationCap, Lightbulb, Puzzle, RefreshCw, Search, Sliders, Target, Wrench, X } from "lucide-react";
+import { AlertTriangle, ArrowRight, Award, Brain, Check, CircleSlash, ClipboardCheck, Clock, Download, FolderKanban, GraduationCap, Lightbulb, Puzzle, RefreshCw, Search, Sliders, Target, Wrench, X } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { usePracticeSession } from "../context/PracticeSessionContext";
 import {
@@ -18,6 +18,9 @@ import {
 } from "../services/certificatesService";
 import QuestionCard from "../components/QuestionCard";
 import FeedbackPanel from "../components/FeedbackPanel";
+import QuestionNavigator from "../components/question/QuestionNavigator";
+import AiExplainPanel from "../components/question/AiExplainPanel";
+import Pagination from "../components/question/Pagination";
 import ConfirmModal from "../components/ConfirmModal";
 import WeakestDomainsPanel from "../components/WeakestDomainsPanel";
 import Alert from "../components/ui/Alert";
@@ -71,6 +74,29 @@ const EXAM_PASS_PERCENT = 65;
 // length picker still lets a learner run a shorter self-test.
 const MOCK_TEST_LENGTH = 40;
 
+// The Real Exam is a fixed 40-question paper across every domain -- the
+// length picker is hidden for it, matching the official ISTQB CTFL exam.
+const REAL_EXAM_LENGTH = 40;
+
+// Shown on the setup screen once "Real Exam" is picked. Describes how THIS
+// platform runs the exam, echoing the ISTQB CTFL Foundation format.
+const EXAM_INSTRUCTIONS = [
+  "40 questions covering all six CTFL v4.0 domains, in a mix of question types (multiple choice, multiple answer, true/false, fill-in-the-blank and matching).",
+  "1 mark per question, 40 marks total. The pass mark is 65% — 26 out of 40 — the ISTQB CTFL Foundation standard.",
+  "Rate your confidence (1–5) on every answer. It feeds your analytics and never changes your score.",
+  "Answers lock in as you go. Correct answers and explanations stay hidden until you submit the whole exam.",
+  "Unanswered questions are marked incorrect. Attempt every question — there is no penalty for a wrong answer.",
+  "No time limit is enforced here, but the official exam allows 60 minutes (75 for non-native speakers). A timer is shown for reference only.",
+  "Once you submit, answers cannot be changed. Passing earns your AISTP certificate.",
+];
+
+// mm:ss for the display-only elapsed timer.
+function formatDuration(totalSeconds) {
+  const m = Math.floor(totalSeconds / 60);
+  const s = totalSeconds % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
 function OptionTile({ isSelected, onClick, children, className = "" }) {
   return (
     <button
@@ -105,10 +131,10 @@ export default function PracticePage() {
   const [domainAccuracy, setDomainAccuracy] = useState(null);
   const [analyticsStatus, setAnalyticsStatus] = useState("guest"); // guest | loading | ready
 
-  // The full ordered question list for the session. Questions stay in place
-  // (unlike the old one-at-a-time queue) so the learner can page back and
-  // forth freely; PER_PAGE of them show at once. Per-question answer /
-  // result / submitted state lives in the *ById maps, keyed by question id.
+  // The full ordered question list for the session. PER_PAGE questions
+  // show at once and the learner pages through them (or jumps via the
+  // navigator); per-question answer / result / submitted state lives in
+  // the *ById maps keyed by question id so nothing is lost on navigation.
   const PER_PAGE = 5;
   const [questions, setQuestions] = useState([]);
   const [currentPage, setCurrentPage] = useState(0);
@@ -139,6 +165,16 @@ export default function PracticePage() {
   // Submit again without answering) does the real submit confirmation open.
   const [skipNoticeOpen, setSkipNoticeOpen] = useState(false);
   const [skipsAcknowledged, setSkipsAcknowledged] = useState(false);
+
+  // Client-side only: questions the learner flagged to revisit. A plain
+  // Set of ids, reset when a new session starts -- never sent to the API.
+  const [flaggedIds, setFlaggedIds] = useState(() => new Set());
+  // Display-only elapsed time since the session's questions loaded. Not a
+  // limit: it never auto-submits or changes scoring.
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  // The single question the navigator highlights -- the last one the
+  // learner navigated to (0-based index into `questions`).
+  const [currentIndex, setCurrentIndex] = useState(0);
 
   // Certificate (Real Exam, passed): claim it. The name is the username.
   const [claimedCert, setClaimedCert] = useState(null);
@@ -194,6 +230,22 @@ export default function PracticePage() {
   const isMock = mode === "mock";
   const isExamLike = mode === "test" || mode === "mock";
 
+  // Tick the display-only elapsed timer while a session is in progress.
+  useEffect(() => {
+    if (!sessionStarted || isSessionComplete) return undefined;
+    const id = setInterval(() => setElapsedSeconds((s) => s + 1), 1000);
+    return () => clearInterval(id);
+  }, [sessionStarted, isSessionComplete]);
+
+  function toggleFlag(questionId) {
+    setFlaggedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(questionId)) next.delete(questionId);
+      else next.add(questionId);
+      return next;
+    });
+  }
+
   function toggleDomain(domainId) {
     setSelectedDomainIds((prev) =>
       prev.includes(domainId) ? prev.filter((id) => id !== domainId) : [...prev, domainId]
@@ -230,11 +282,14 @@ export default function PracticePage() {
       setQuestions(data.questions);
       setTotalCount(data.questions.length);
       setCurrentPage(0);
+      setCurrentIndex(0);
       setSessionId(data.session_id);
       setAnswersById({});
       setConfidenceById({});
       setResultsById({});
       setSubmittedIds(new Set());
+      setFlaggedIds(new Set());
+      setElapsedSeconds(0);
       setCorrectCount(0);
       setFinalScore(null);
       setTestReview(null);
@@ -266,11 +321,57 @@ export default function PracticePage() {
   const pageCount = Math.max(1, Math.ceil(questions.length / PER_PAGE));
   const pageStart = currentPage * PER_PAGE;
   const pageQuestions = questions.slice(pageStart, pageStart + PER_PAGE);
+  const pageEnd = Math.min(pageStart + PER_PAGE, questions.length);
   const answeredCount = submittedIds.size;
   const allAnswered = questions.length > 0 && answeredCount === questions.length;
 
+  // Question id to scroll into view once its page has rendered. Set by
+  // goToQuestion (navigator / "go to unanswered"); consumed by the effect.
+  const scrollTargetRef = useRef(null);
+
+  function scrollToQuestion(questionId) {
+    if (typeof document === "undefined" || questionId == null) return;
+    document
+      .getElementById(`question-${questionId}`)
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   function goToQuestion(index) {
-    setCurrentPage(Math.floor(index / PER_PAGE));
+    const target = questions[index];
+    if (!target) return;
+    setLoadError("");
+    setCurrentIndex(index);
+    const targetPage = Math.floor(index / PER_PAGE);
+    if (targetPage === currentPage) {
+      scrollToQuestion(target.id);
+    } else {
+      scrollTargetRef.current = target.id;
+      setCurrentPage(targetPage);
+    }
+  }
+
+  // After a navigator click changes the page, scroll to the exact question.
+  useEffect(() => {
+    if (scrollTargetRef.current == null) return;
+    const id = scrollTargetRef.current;
+    scrollTargetRef.current = null;
+    scrollToQuestion(id);
+  }, [currentPage]);
+
+  // Exam only: unlock a saved answer so it can be changed and re-submitted.
+  function handleEditAnswer(questionId) {
+    setSubmittedIds((prev) => {
+      if (!prev.has(questionId)) return prev;
+      const next = new Set(prev);
+      next.delete(questionId);
+      return next;
+    });
+    setResultsById((prev) => {
+      if (!prev[questionId]) return prev;
+      const next = { ...prev };
+      delete next[questionId];
+      return next;
+    });
     setLoadError("");
   }
 
@@ -537,10 +638,14 @@ export default function PracticePage() {
                     onClick={() => {
                       setMode(option.value);
                       // The ISTQB Mock Test defaults to a full 40-question
-                      // paper; the length picker can still shorten it.
+                      // paper (the length picker can still shorten it); the
+                      // Real Exam is locked to 40 with no picker at all.
                       if (option.value === "mock") {
                         setIsCustomLength(false);
                         setSessionLength(MOCK_TEST_LENGTH);
+                      } else if (option.value === "test") {
+                        setIsCustomLength(false);
+                        setSessionLength(REAL_EXAM_LENGTH);
                       }
                     }}
                   >
@@ -592,6 +697,27 @@ export default function PracticePage() {
           </div>
           )}
 
+          {mode === "test" && (
+            <Card className="border-test/25 p-5 animate-fade-in">
+              <h2 className="flex items-center gap-2 text-body-sm font-semibold text-text-primary">
+                <ClipboardCheck className="h-4 w-4 text-test" aria-hidden="true" />
+                Exam instructions
+              </h2>
+              <p className="mt-1 text-caption text-text-muted">
+                Read these before you begin — the Real Exam can&apos;t be paused or restarted.
+              </p>
+              <ul className="mt-3 space-y-2">
+                {EXAM_INSTRUCTIONS.map((line) => (
+                  <li key={line} className="flex gap-2 text-body-sm text-text-secondary">
+                    <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-test" aria-hidden="true" />
+                    <span>{line}</span>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
+
+          {mode !== "test" && (
           <div>
             <h2 className="mb-3 text-label text-text-secondary">Session length</h2>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -644,6 +770,7 @@ export default function PracticePage() {
               </div>
             )}
           </div>
+          )}
 
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-surface-muted px-5 py-4 text-body-sm">
             <div className="flex items-center gap-2 text-text-secondary">
@@ -866,6 +993,14 @@ export default function PracticePage() {
                       </span>
                     </div>
                     <p className="mb-2 text-body-sm font-medium text-text-primary">{item.text}</p>
+                    {item.image && (
+                      /* eslint-disable-next-line @next/next/no-img-element */
+                      <img
+                        src={item.image}
+                        alt=""
+                        className="mb-2 max-h-64 rounded-md border border-border object-contain"
+                      />
+                    )}
                     <p className="mb-1 text-body-sm text-text-secondary">
                       Your answer:{" "}
                       <span className={cn("font-medium", item.skipped ? "text-warning" : "text-text-primary")}>
@@ -925,66 +1060,76 @@ export default function PracticePage() {
   const unansweredCount = totalCount - answeredCount;
   const isLastPage = currentPage >= pageCount - 1;
 
+  const ModeIcon = isMock ? GraduationCap : isExamLike ? ClipboardCheck : Target;
+  const modeLabel = isMock ? "ISTQB Mock Test" : mode === "test" ? "Real Exam" : "Practice Mode";
+
+  function goToPage(nextPage) {
+    const clamped = Math.max(0, Math.min(pageCount - 1, nextPage));
+    setCurrentPage(clamped);
+    setCurrentIndex(clamped * PER_PAGE);
+    setLoadError("");
+    if (typeof window !== "undefined") {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }
+
   return (
-    <div className="min-h-[calc(100vh-57px)] sm:min-h-screen bg-background px-4 py-10 sm:px-6">
-      <div className="mx-auto max-w-2xl">
-        {isExamLike ? (
-          <div className="mb-4 rounded-xl border border-test/20 bg-test-muted/40 p-4 sm:p-5">
-            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
-              <div className="flex items-center gap-3">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-surface text-test shadow-xs">
-                  {isMock ? (
-                    <GraduationCap className="h-4 w-4" aria-hidden="true" />
-                  ) : (
-                    <ClipboardCheck className="h-4 w-4" aria-hidden="true" />
-                  )}
-                </span>
-                <div>
-                  <p className="text-caption font-semibold uppercase tracking-wide text-test">
-                    {isMock ? "ISTQB Mock Test" : "Real Exam"}
-                  </p>
-                  <p className="text-body-sm font-medium text-text-primary">
-                    Question {pageStart + 1}–{Math.min(pageStart + PER_PAGE, questions.length)} of {totalCount}
-                  </p>
-                </div>
+    <div className="min-h-[calc(100vh-57px)] sm:min-h-screen bg-background">
+      {/* Sticky session bar: identity, elapsed time, save state, progress. */}
+      <div className="sticky top-0 z-10 border-b border-border bg-surface/95 backdrop-blur">
+        <div className="mx-auto max-w-6xl px-4 py-3 sm:px-6">
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+            <div className="flex min-w-0 items-center gap-2.5">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-test-muted text-test">
+                <ModeIcon className="h-4 w-4" aria-hidden="true" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-caption font-semibold uppercase tracking-wide text-test">{modeLabel}</p>
+                <p className="text-body-sm font-medium text-text-primary">
+                  Question{pageEnd - pageStart > 1 ? "s" : ""} {pageStart + 1}
+                  {pageEnd - pageStart > 1 ? `–${pageEnd}` : ""} of {totalCount}
+                </p>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-surface px-2.5 py-1 text-caption font-semibold tabular-nums text-text-secondary shadow-xs">
-                  <Check className="h-3 w-3 text-test" aria-hidden="true" />
-                  {answeredCount}/{totalCount}
-                </span>
-                {unansweredCount > 0 && (
-                  <span className="inline-flex items-center rounded-full bg-warning-muted px-2.5 py-1 text-caption font-semibold tabular-nums text-warning">
-                    {unansweredCount} left
-                  </span>
-                )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 text-caption">
+              <span className="inline-flex items-center gap-1 tabular-nums text-text-muted" title="Time elapsed (not a limit)">
+                <Clock className="h-3.5 w-3.5" aria-hidden="true" />
+                {formatDuration(elapsedSeconds)}
+              </span>
+              <span className="inline-flex items-center gap-1 text-text-muted">
+                <Check className="h-3.5 w-3.5 text-success" aria-hidden="true" />
+                {answeredCount === 0 ? "Nothing saved yet" : `${answeredCount}/${totalCount} saved`}
+              </span>
+              {isExamLike ? (
                 <Button tone="test" size="sm" onClick={requestFinish}>
                   {isMock ? "Submit" : "Submit exam"}
                 </Button>
-              </div>
+              ) : (
+                <>
+                  <Badge tone="test">Score {correctCount}</Badge>
+                  <button
+                    type="button"
+                    onClick={() => setShowEndConfirm(true)}
+                    className="cursor-pointer rounded-full border border-border px-2.5 py-0.5 font-medium text-text-muted transition-colors hover:border-error/30 hover:bg-error-muted hover:text-error"
+                  >
+                    End practice
+                  </button>
+                </>
+              )}
             </div>
           </div>
-        ) : (
-          <div className="mb-2 flex items-center justify-between text-body-sm text-text-muted">
-            <span>
-              Questions {pageStart + 1}–{Math.min(pageStart + PER_PAGE, questions.length)} of {totalCount}
-              <span className="ml-2 text-text-muted/70">· {answeredCount} answered</span>
+
+          <div className="mt-2.5 flex items-center gap-3">
+            <Progress value={progressPercent} tone="test" className="flex-1" />
+            <span className="text-caption font-semibold tabular-nums text-text-muted">
+              {Math.round(progressPercent)}%
             </span>
-            <div className="flex items-center gap-2">
-              <Badge tone="test">Score: {correctCount}</Badge>
-              <button
-                type="button"
-                onClick={() => setShowEndConfirm(true)}
-                className="cursor-pointer rounded-full border border-border px-2.5 py-0.5 text-caption font-medium text-text-muted transition-colors hover:border-error/30 hover:bg-error-muted hover:text-error"
-              >
-                End practice
-              </button>
-            </div>
           </div>
-        )}
+        </div>
+      </div>
 
-        <Progress value={progressPercent} tone="test" className="mb-4" />
-
+      <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
         {isExamLike && skipNoticeOpen && unansweredCount > 0 && (
           <div className="mb-6 flex items-start gap-3 rounded-xl border border-warning/30 bg-warning-muted/60 p-4 animate-fade-in">
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-surface text-warning shadow-xs">
@@ -1027,119 +1172,89 @@ export default function PracticePage() {
           </div>
         )}
 
-        {/* Question navigator: jump to any question. */}
-        <div className="mb-6">
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <p className="text-caption font-semibold uppercase tracking-wide text-text-muted">
-              Questions
-            </p>
-            <div className="flex items-center gap-3 text-caption text-text-muted">
-              <span className="flex items-center gap-1.5">
-                <span className="h-2.5 w-2.5 rounded-sm bg-test" aria-hidden="true" />
-                Answered
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span
-                  className={cn(
-                    "h-2.5 w-2.5 rounded-sm border",
-                    isExamLike && skipsAcknowledged
-                      ? "border-warning/60 bg-warning-muted"
-                      : "border-border-strong bg-surface"
-                  )}
-                  aria-hidden="true"
-                />
-                {isExamLike && skipsAcknowledged ? "Skipped" : "Unanswered"}
-              </span>
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {questions.map((q, index) => {
-              const onThisPage = index >= pageStart && index < pageStart + PER_PAGE;
-              const submitted = submittedIds.has(q.id);
-              return (
-                <button
-                  key={q.id}
-                  type="button"
-                  onClick={() => goToQuestion(index)}
-                  aria-current={onThisPage ? "true" : undefined}
-                  aria-label={`Question ${index + 1}${submitted ? " (answered)" : " (not answered)"}`}
-                  className={cn(
-                    "flex h-8 w-8 items-center justify-center rounded-md border text-caption font-semibold tabular-nums transition-all",
-                    submitted
-                      ? "border-test bg-test text-white"
-                      : isExamLike && skipsAcknowledged
-                        ? "border-warning/60 bg-warning-muted text-warning hover:border-warning"
-                        : "border-border bg-surface text-text-muted hover:border-test/40 hover:text-text-secondary",
-                    onThisPage && "ring-2 ring-test/40 ring-offset-1"
-                  )}
-                >
-                  {index + 1}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {pageQuestions.map((question) => {
-          const submitted = submittedIds.has(question.id);
-          const result = resultsById[question.id] ?? null;
-          return (
-            <div key={question.id} className="mb-6 animate-fade-in">
-              <QuestionCard
-                question={question}
-                answer={answersById[question.id] ?? null}
-                onAnswerChange={(next) => handleAnswerChange(question.id, next)}
-                onSubmit={() => handleSubmit(question.id)}
-                canSkip={false}
-                isAnswered={submitted}
-                isSubmitting={submittingId === question.id}
-                result={result}
-                mode={mode}
-                hideAdvance
-                confidenceRequired={mode === "test"}
-                confidence={confidenceById[question.id] ?? null}
-                onConfidenceChange={(level) => handleConfidenceChange(question.id, level)}
-              />
-
-              {mode === "practice" && result && (
-                <FeedbackPanel
-                  isCorrect={result.isCorrect}
-                  correctOptionText={result.correctAnswerText}
-                  questionId={question.id}
-                  domain={question.domain}
-                  hideNext
-                />
-              )}
-            </div>
-          );
-        })}
-
-        {loadError && (
-          <Alert tone="error" className="mb-4">
-            {loadError}
-          </Alert>
+        {pageCount > 1 && (
+          <Pagination
+            page={currentPage}
+            pageCount={pageCount}
+            onChange={goToPage}
+            className="mb-5"
+          />
         )}
 
-        <div className="mt-2 flex items-center justify-between gap-3">
-          <Button
-            variant="outline"
-            onClick={() => setCurrentPage((p) => Math.max(0, p - 1))}
-            disabled={currentPage === 0}
-          >
-            Previous
-          </Button>
-          <span className="text-body-sm text-text-muted">
-            Page {currentPage + 1} of {pageCount}
-          </span>
-          {isLastPage ? (
-            <Button tone="test" onClick={requestFinish}>
-              {isMock ? "Submit mock test" : mode === "test" ? "Submit exam" : "Finish session"}
-            </Button>
-          ) : (
-            <Button tone="test" onClick={() => setCurrentPage((p) => Math.min(pageCount - 1, p + 1))}>
-              Next
-            </Button>
-          )}
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_240px] xl:items-start">
+          <div className="min-w-0 space-y-6">
+            {pageQuestions.map((question, i) => {
+              const submitted = submittedIds.has(question.id);
+              const result = resultsById[question.id] ?? null;
+              return (
+                <div
+                  key={question.id}
+                  id={`question-${question.id}`}
+                  className="scroll-mt-28 animate-fade-in"
+                >
+                  <QuestionCard
+                    question={question}
+                    questionNumber={pageStart + i + 1}
+                    answer={answersById[question.id] ?? null}
+                    onAnswerChange={(next) => handleAnswerChange(question.id, next)}
+                    onSubmit={() => handleSubmit(question.id)}
+                    onEdit={isExamLike ? () => handleEditAnswer(question.id) : undefined}
+                    canSkip={false}
+                    isAnswered={submitted}
+                    isSubmitting={submittingId === question.id}
+                    result={result}
+                    mode={mode}
+                    hideAdvance
+                    confidenceRequired={mode === "test"}
+                    confidence={confidenceById[question.id] ?? null}
+                    onConfidenceChange={(level) => handleConfidenceChange(question.id, level)}
+                    flagged={flaggedIds.has(question.id)}
+                    onToggleFlag={() => toggleFlag(question.id)}
+                  />
+
+                  {mode === "practice" && result && (
+                    <>
+                      <FeedbackPanel
+                        isCorrect={result.isCorrect}
+                        correctOptionText={result.correctAnswerText}
+                        questionId={question.id}
+                        domain={question.domain}
+                        hideNext
+                        hideExplain
+                      />
+                      <AiExplainPanel questionId={question.id} available className="mt-3" />
+                    </>
+                  )}
+                </div>
+              );
+            })}
+
+            {loadError && <Alert tone="error">{loadError}</Alert>}
+
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-5">
+              <Pagination page={currentPage} pageCount={pageCount} onChange={goToPage} />
+              {isLastPage && (
+                <Button tone="test" size="sm" onClick={requestFinish}>
+                  {isMock
+                    ? "Submit mock test"
+                    : mode === "test"
+                      ? "Submit exam"
+                      : "Finish session"}
+                </Button>
+              )}
+            </div>
+          </div>
+
+          <div className="xl:sticky xl:top-[104px]">
+            <QuestionNavigator
+              questions={questions}
+              currentIndex={currentIndex}
+              submittedIds={submittedIds}
+              flaggedIds={flaggedIds}
+              results={mode === "practice" ? resultsById : null}
+              onSelect={goToQuestion}
+            />
+          </div>
         </div>
       </div>
 

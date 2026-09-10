@@ -5,13 +5,17 @@ import { getErrorMessage } from "../services/apiClient";
 import {
   createQuestion,
   deleteQuestion,
+  deleteQuestionImage,
   fetchAdminQuestions,
   fetchDomains,
   fetchGenerationJob,
   generateQuestionsFromFile,
   importQuestionsFile,
   updateQuestion,
+  uploadQuestionImage,
 } from "../services/questionsService";
+
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
 const DIFFICULTIES = ["easy", "medium", "hard"];
 const EMPTY_OPTION = { text: "", is_correct: false };
@@ -52,6 +56,11 @@ function emptyForm(domainId) {
     options: [{ ...EMPTY_OPTION }, { ...EMPTY_OPTION }],
     blank_answers: [{ ...EMPTY_BLANK_ANSWER }],
     matching_pairs: [{ ...EMPTY_MATCHING_PAIR }, { ...EMPTY_MATCHING_PAIR }],
+    // image: URL of the already-saved image (edit only). imageFile: a new
+    // File to upload on save. removeImage: drop the saved image on save.
+    image: null,
+    imageFile: null,
+    removeImage: false,
   };
 }
 
@@ -237,7 +246,34 @@ export default function AdminPage() {
       matching_pairs: question.matching_pairs?.length
         ? question.matching_pairs.map((m) => ({ prompt_text: m.prompt_text, match_text: m.match_text }))
         : [{ ...EMPTY_MATCHING_PAIR }, { ...EMPTY_MATCHING_PAIR }],
+      image: question.image ?? null,
+      imageFile: null,
+      removeImage: false,
     });
+  }
+
+  function pickImage(file) {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setFormError("Choose an image file (PNG, JPG, GIF, WebP).");
+      return;
+    }
+    if (file.size > MAX_IMAGE_BYTES) {
+      setFormError("Image must be 5 MB or smaller.");
+      return;
+    }
+    setFormError("");
+    setForm((f) => ({ ...f, imageFile: file, removeImage: false }));
+  }
+
+  function clearImage() {
+    setForm((f) => ({
+      ...f,
+      imageFile: null,
+      // if an already-saved image is showing, mark it for deletion on save
+      removeImage: Boolean(f.image),
+      image: null,
+    }));
   }
 
   function closeForm() {
@@ -349,11 +385,18 @@ export default function AdminPage() {
 
     setIsSaving(true);
     try {
-      if (form.id) {
-        await updateQuestion(form.id, payload);
-      } else {
-        await createQuestion(payload);
+      const saved = form.id
+        ? await updateQuestion(form.id, payload)
+        : await createQuestion(payload);
+      const questionId = form.id ?? saved.id;
+
+      // Image is a separate multipart request against the saved question.
+      if (form.imageFile) {
+        await uploadQuestionImage(questionId, form.imageFile);
+      } else if (form.removeImage && form.id) {
+        await deleteQuestionImage(questionId);
       }
+
       closeForm();
       loadData();
     } catch (err) {
@@ -611,7 +654,17 @@ export default function AdminPage() {
                 <tbody>
                   {questions.map((q) => (
                     <tr key={q.id} className="border-b border-gray-100">
-                      <td className="max-w-md truncate py-2 pr-4 text-gray-900">{q.text}</td>
+                      <td className="max-w-md truncate py-2 pr-4 text-gray-900">
+                        {q.image && (
+                          <span
+                            title="Has an image"
+                            className="mr-1.5 rounded bg-gray-100 px-1 text-xs text-gray-500"
+                          >
+                            IMG
+                          </span>
+                        )}
+                        {q.text}
+                      </td>
                       <td className="py-2 pr-4 text-gray-600">{domainName(q.domain)}</td>
                       <td className="py-2 pr-4 text-gray-600">
                         {QUESTION_TYPES.find((t) => t.value === q.question_type)?.label ?? q.question_type}
@@ -705,6 +758,39 @@ export default function AdminPage() {
                 onChange={(e) => setForm({ ...form, text: e.target.value })}
                 className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
               />
+
+              <label className="mt-4 block text-sm font-medium text-gray-700">
+                Image <span className="font-normal text-gray-400">(optional)</span>
+              </label>
+              {(form.imageFile || form.image) && (
+                <div className="mt-2 flex items-start gap-3">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={form.imageFile ? URL.createObjectURL(form.imageFile) : form.image}
+                    alt="Question illustration preview"
+                    className="max-h-40 rounded-lg border border-gray-200 object-contain"
+                  />
+                  <button
+                    type="button"
+                    onClick={clearImage}
+                    className="text-xs font-medium text-red-600 hover:underline"
+                  >
+                    Remove image
+                  </button>
+                </div>
+              )}
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/gif,image/webp"
+                onChange={(e) => {
+                  pickImage(e.target.files?.[0]);
+                  e.target.value = "";
+                }}
+                className="mt-2 block w-full text-sm text-gray-600 file:mr-3 file:rounded-lg file:border-0 file:bg-gray-100 file:px-3 file:py-2 file:text-sm file:font-medium file:text-gray-700 hover:file:bg-gray-200"
+              />
+              <p className="mt-1 text-xs text-gray-400">
+                Shown above the question in every mode. PNG, JPG, GIF or WebP, up to 5 MB.
+              </p>
 
               <label className="mt-4 block text-sm font-medium text-gray-700">Difficulty</label>
               <select

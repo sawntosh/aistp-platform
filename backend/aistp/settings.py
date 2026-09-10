@@ -267,9 +267,11 @@ STORAGES = {
     },
 }
 
-# Uploaded syllabus documents for RAG question generation
-# (questions.models.GenerationJob.source_file).
-MEDIA_URL = 'media/'
+# User-uploaded files: RAG syllabus documents
+# (questions.models.GenerationJob.source_file) and question images
+# (questions.models.Question.image). Leading slash so a served file's URL
+# is absolute from the site root, not relative to the requesting page.
+MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
 # Model used by services/question_generation_service.py's Groq calls

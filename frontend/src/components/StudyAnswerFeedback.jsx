@@ -1,11 +1,18 @@
 import { useState } from "react";
-import { CheckCircle2, Lightbulb, XCircle } from "lucide-react";
+import { Lightbulb } from "lucide-react";
 import { fetchExplanation } from "../services/explanationsService";
 import { RichText } from "../utils/richText";
-import { cn } from "../lib/cn";
+import AnswerReveal from "./question/AnswerReveal";
 import Button from "./ui/Button";
 
-export default function StudyAnswerFeedback({ isCorrect, correctAnswerText, questionId, onReviewConcept, onNext, isLastQuestion }) {
+export default function StudyAnswerFeedback({
+  isCorrect,
+  correctAnswerText,
+  questionId,
+  onReviewConcept,
+  onNext,
+  isLastQuestion,
+}) {
   const [explanation, setExplanation] = useState(null);
   const [isExplanationFallback, setIsExplanationFallback] = useState(false);
   const [isLoadingExplanation, setIsLoadingExplanation] = useState(false);
@@ -26,25 +33,8 @@ export default function StudyAnswerFeedback({ isCorrect, correctAnswerText, ques
   }
 
   return (
-    <div
-      role="status"
-      className={cn(
-        "mt-4 rounded-lg border p-6 animate-pop",
-        isCorrect ? "border-success/25 bg-success-muted" : "border-warning/25 bg-warning-muted"
-      )}
-    >
-      <p className={cn("flex items-center gap-2 text-h3", isCorrect ? "text-success" : "text-warning")}>
-        {isCorrect ? <CheckCircle2 className="h-5 w-5" aria-hidden="true" /> : <XCircle className="h-5 w-5" aria-hidden="true" />}
-        {isCorrect ? "Correct" : "Not quite"}
-      </p>
-
-      {!isCorrect && (
-        <p className="mt-2 text-body-sm text-text-secondary">
-          The best answer is: <span className="font-medium text-text-primary">{correctAnswerText}</span>
-        </p>
-      )}
-
-      <div className="mt-4">
+    <AnswerReveal isCorrect={isCorrect} correctAnswerText={correctAnswerText} wrongTone="warning">
+      <div>
         {!explanation && (
           <button
             type="button"
@@ -58,7 +48,7 @@ export default function StudyAnswerFeedback({ isCorrect, correctAnswerText, ques
         )}
         {explanationError && <p className="mt-2 text-body-sm text-error">{explanationError}</p>}
         {explanation && (
-          <div className="mt-2 rounded-md border border-border bg-surface p-4">
+          <div className="mt-1 rounded-md border border-border bg-surface p-4">
             {isExplanationFallback && (
               <p className="mb-1.5 text-caption font-medium text-warning">
                 The AI tutor is unavailable right now. Here&apos;s a basic explanation.
@@ -69,7 +59,7 @@ export default function StudyAnswerFeedback({ isCorrect, correctAnswerText, ques
         )}
       </div>
 
-      <div className="mt-5 flex flex-col gap-2 sm:flex-row">
+      <div className="mt-4 flex flex-col gap-2 sm:flex-row">
         {!isCorrect && (
           <Button variant="outline" onClick={onReviewConcept}>
             Review this concept
@@ -79,6 +69,6 @@ export default function StudyAnswerFeedback({ isCorrect, correctAnswerText, ques
           {isLastQuestion ? "Finish" : "Next question"}
         </Button>
       </div>
-    </div>
+    </AnswerReveal>
   );
 }
