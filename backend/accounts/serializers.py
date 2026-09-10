@@ -91,7 +91,9 @@ class RegisterSerializer(serializers.ModelSerializer):
 
 
 class EmailVerificationSerializer(serializers.Serializer):
-    token = serializers.CharField()
+    """Payload for VerifyEmailView: the address plus the 6-digit code."""
+    email = serializers.EmailField()
+    code = serializers.CharField()
 
 
 class ResendVerificationSerializer(serializers.Serializer):
@@ -105,9 +107,10 @@ class PasswordResetRequestSerializer(serializers.Serializer):
 class PasswordResetConfirmSerializer(serializers.Serializer):
     """Payload for PasswordResetConfirmView. The password policy
     (AUTH_PASSWORD_VALIDATORS -- length, complexity, similarity) is checked
-    in the view instead, where the token has been resolved to a real user
+    in the view instead, where the code has been resolved to a real user
     for the similarity comparison."""
-    token = serializers.CharField()
+    email = serializers.EmailField()
+    code = serializers.CharField()
     password = serializers.CharField(write_only=True)
     confirm_password = serializers.CharField(write_only=True)
 

@@ -24,6 +24,7 @@ export default function LoginPage() {
   const [errorKey, setErrorKey] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [needsVerification, setNeedsVerification] = useState(false);
+  const [unverifiedEmail, setUnverifiedEmail] = useState("");
 
   const justRegistered = router.query.registered === "1";
   const activeRole = ROLES.find((r) => r.value === role) ?? ROLES[0];
@@ -42,6 +43,7 @@ export default function LoginPage() {
     e.preventDefault();
     setError("");
     setNeedsVerification(false);
+    setUnverifiedEmail("");
 
     if (!/^[A-Za-z]+$/.test(form.username)) {
       showError("Username must contain letters only (A–Z).");
@@ -61,6 +63,7 @@ export default function LoginPage() {
       // 403 = correct password but the account's email isn't verified yet.
       if (err?.status === 403 && err?.body?.can_resend) {
         setNeedsVerification(true);
+        setUnverifiedEmail(err.body.email || "");
         showError(err.body.detail || "Please verify your email address before logging in.");
       } else if (err?.status === 423) {
         showError(err?.body?.detail || "Too many failed attempts. Try again shortly.");
@@ -154,10 +157,16 @@ export default function LoginPage() {
 
           {needsVerification && (
             <p className="text-body-sm text-text-muted animate-fade-in">
-              <Link href="/verify-email" className="font-medium text-primary hover:underline">
-                Resend verification email
-              </Link>{" "}
-              — in local dev the link is printed to the server console.
+              <Link
+                href={
+                  unverifiedEmail
+                    ? `/verify-email?email=${encodeURIComponent(unverifiedEmail)}`
+                    : "/verify-email"
+                }
+                className="font-medium text-primary hover:underline"
+              >
+                Enter your verification code
+              </Link>
             </p>
           )}
 
