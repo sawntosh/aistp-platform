@@ -191,6 +191,7 @@ export default function QuestionCard({
   onAnswerChange,
   onSubmit,
   onSkip,
+  onEdit,
   canSkip,
   isAnswered,
   isSubmitting,
@@ -276,9 +277,16 @@ export default function QuestionCard({
 
       {isAnswered && isExam && (
         <div className="mt-5">
-          <p className="rounded-md bg-surface-muted px-4 py-2 text-body-sm text-text-secondary">
-            Answer saved. You&apos;ll see the correct answer and explanation after you submit.
-          </p>
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-md bg-surface-muted px-4 py-2">
+            <p className="text-body-sm text-text-secondary">
+              Answer saved. You&apos;ll see the correct answer and explanation after you submit.
+            </p>
+            {onEdit && (
+              <Button variant="outline" tone="test" size="sm" onClick={onEdit}>
+                Change answer
+              </Button>
+            )}
+          </div>
           {confidence != null && (
             <p className="mt-2 text-caption text-text-muted">
               Your confidence:{" "}

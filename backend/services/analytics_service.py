@@ -23,6 +23,19 @@ def record_attempt(user, domain, is_correct):
     return record
 
 
+def revise_attempt_correctness(user, domain, was_correct, now_correct):
+    """Adjust the per-domain running total when an existing Attempt is
+    edited (the learner changed a saved answer before finishing the exam).
+    The total_count is unchanged -- it's still one answer for that question
+    -- only correct_count shifts by the delta."""
+    if bool(was_correct) == bool(now_correct):
+        return
+    record, _ = PerformanceAnalytics.objects.get_or_create(user=user, domain=domain)
+    record.correct_count = max(record.correct_count + (1 if now_correct else -1), 0)
+    record.save(update_fields=["correct_count", "last_updated"])
+    return record
+
+
 def get_domain_accuracy(user):
     """Return per-domain accuracy dicts for the given user, reading from
     analytics.models.PerformanceAnalytics. Sorted weakest domain first."""

@@ -49,14 +49,19 @@ class SessionAttemptIntegrityTests(APITestCase):
         return self.client.post("/api/questions/submit/", payload)
 
     # -- duplicate question -------------------------------------------------
-    def test_second_submit_for_same_question_is_rejected(self):
+    def test_second_submit_for_same_question_edits_it_in_place(self):
+        """Re-submitting is now an *edit* (the "Change answer" button), not a
+        replay: it updates the one Attempt row, never adds another."""
         session = self._session(count=1)
         first = self._submit(session, self.q1, self.q1_correct)
         self.assertEqual(first.status_code, 200)
 
-        second = self._submit(session, self.q1, self.q1_correct)
-        self.assertEqual(second.status_code, 409)
+        second = self._submit(session, self.q1, self.q1_wrong)
+        self.assertEqual(second.status_code, 200)
         self.assertEqual(Attempt.objects.filter(session=session).count(), 1)
+        attempt = Attempt.objects.get(session=session)
+        self.assertEqual(attempt.selected_option, self.q1_wrong)
+        self.assertFalse(attempt.is_correct)
 
     def test_duplicate_submits_do_not_inflate_domain_analytics(self):
         session = self._session(count=1)
