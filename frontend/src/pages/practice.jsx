@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/router";
 import { AlertTriangle, ArrowRight, Award, Brain, Check, CircleSlash, ClipboardCheck, Clock, Download, FolderKanban, GraduationCap, Lightbulb, Puzzle, RefreshCw, Search, Sliders, Target, Wrench, X } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
@@ -305,13 +305,37 @@ export default function PracticePage() {
   const answeredCount = submittedIds.size;
   const allAnswered = questions.length > 0 && answeredCount === questions.length;
 
+  // Question id to scroll into view once its page has rendered. Set by
+  // goToQuestion (navigator / "go to unanswered"); consumed by the effect.
+  const scrollTargetRef = useRef(null);
+
+  function scrollToQuestion(questionId) {
+    if (typeof document === "undefined" || questionId == null) return;
+    document
+      .getElementById(`question-${questionId}`)
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   function goToQuestion(index) {
-    setCurrentPage(Math.floor(index / PER_PAGE));
+    const target = questions[index];
+    if (!target) return;
     setLoadError("");
-    if (typeof window !== "undefined") {
-      window.scrollTo({ top: 0, behavior: "smooth" });
+    const targetPage = Math.floor(index / PER_PAGE);
+    if (targetPage === currentPage) {
+      scrollToQuestion(target.id);
+    } else {
+      scrollTargetRef.current = target.id;
+      setCurrentPage(targetPage);
     }
   }
+
+  // After a navigator click changes the page, scroll to the exact question.
+  useEffect(() => {
+    if (scrollTargetRef.current == null) return;
+    const id = scrollTargetRef.current;
+    scrollTargetRef.current = null;
+    scrollToQuestion(id);
+  }, [currentPage]);
 
   // Exam only: unlock a saved answer so it can be changed and re-submitted.
   function handleEditAnswer(questionId) {
@@ -1108,25 +1132,17 @@ export default function PracticePage() {
           />
         )}
 
-        <div className="grid gap-6 xl:grid-cols-[210px_minmax(0,1fr)] xl:items-start">
-          <div className="xl:sticky xl:top-[104px]">
-            <QuestionNavigator
-              questions={questions}
-              activeStart={pageStart}
-              activeCount={PER_PAGE}
-              submittedIds={submittedIds}
-              flaggedIds={flaggedIds}
-              results={mode === "practice" ? resultsById : null}
-              onSelect={goToQuestion}
-            />
-          </div>
-
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_240px] xl:items-start">
           <div className="min-w-0 space-y-6">
             {pageQuestions.map((question, i) => {
               const submitted = submittedIds.has(question.id);
               const result = resultsById[question.id] ?? null;
               return (
-                <div key={question.id} className="animate-fade-in">
+                <div
+                  key={question.id}
+                  id={`question-${question.id}`}
+                  className="scroll-mt-28 animate-fade-in"
+                >
                   <QuestionCard
                     question={question}
                     questionNumber={pageStart + i + 1}
@@ -1178,6 +1194,18 @@ export default function PracticePage() {
                 </Button>
               )}
             </div>
+          </div>
+
+          <div className="xl:sticky xl:top-[104px]">
+            <QuestionNavigator
+              questions={questions}
+              activeStart={pageStart}
+              activeCount={PER_PAGE}
+              submittedIds={submittedIds}
+              flaggedIds={flaggedIds}
+              results={mode === "practice" ? resultsById : null}
+              onSelect={goToQuestion}
+            />
           </div>
         </div>
       </div>

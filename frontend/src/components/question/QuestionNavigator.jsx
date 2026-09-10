@@ -1,8 +1,8 @@
 import { Flag } from "lucide-react";
 import { cn } from "../../lib/cn";
 
-// Jump-to-any-question grid + legend. Pure presentation over the runner's
-// existing per-question state -- no new source of truth. `results` (a
+// Jump-to-any-question grid. Pure presentation over the runner's existing
+// per-question state -- no new source of truth. `results` (a
 // { [id]: { isCorrect } } map) is only passed in Practice Mode, where
 // correctness is known mid-session; exam modes pass nothing and answered
 // cells read simply as "answered".
@@ -12,11 +12,6 @@ function cellClasses({ current, answered, correct, incorrect }) {
   if (incorrect) return "border-error/60 bg-error-muted text-error";
   if (answered) return "border-test/50 bg-test-muted text-test";
   return "border-border bg-surface text-text-muted hover:border-test/40 hover:text-text-secondary";
-}
-
-function LegendDot({ className, icon: Icon }) {
-  if (Icon) return <Icon className={cn("h-3 w-3", className)} aria-hidden="true" />;
-  return <span className={cn("h-2.5 w-2.5 rounded-sm border", className)} aria-hidden="true" />;
 }
 
 export default function QuestionNavigator({
@@ -72,38 +67,6 @@ export default function QuestionNavigator({
             </button>
           );
         })}
-      </div>
-
-      <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1.5 text-caption text-text-muted">
-        <span className="flex items-center gap-1.5">
-          <LegendDot className="border-test bg-test" />
-          Current
-        </span>
-        {showOutcome ? (
-          <>
-            <span className="flex items-center gap-1.5">
-              <LegendDot className="border-success/60 bg-success-muted" />
-              Correct
-            </span>
-            <span className="flex items-center gap-1.5">
-              <LegendDot className="border-error/60 bg-error-muted" />
-              Incorrect
-            </span>
-          </>
-        ) : (
-          <span className="flex items-center gap-1.5">
-            <LegendDot className="border-test/50 bg-test-muted" />
-            Answered
-          </span>
-        )}
-        <span className="flex items-center gap-1.5">
-          <LegendDot className="border-border-strong bg-surface" />
-          Unanswered
-        </span>
-        <span className="flex items-center gap-1.5">
-          <LegendDot className="fill-warning text-warning" icon={Flag} />
-          Flagged
-        </span>
       </div>
     </div>
   );
