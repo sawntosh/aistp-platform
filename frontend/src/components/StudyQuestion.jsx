@@ -174,6 +174,15 @@ export default function StudyQuestion({
       </p>
       <h2 className="mb-6 text-h3 font-normal text-text-primary">{question.text}</h2>
 
+      {question.image && (
+        /* eslint-disable-next-line @next/next/no-img-element */
+        <img
+          src={question.image}
+          alt=""
+          className="mb-6 max-h-96 w-full rounded-md border border-border object-contain"
+        />
+      )}
+
       {OPTION_TYPES.has(question.question_type) && (
         <OptionList question={question} answer={answer} onAnswerChange={onAnswerChange} isAnswered={isAnswered} result={result} />
       )}

@@ -50,7 +50,10 @@ class QuestionPublicSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Question
-        fields = ("id", "domain", "text", "difficulty", "question_type", "options", "matching_pairs", "match_choices")
+        fields = (
+            "id", "domain", "text", "image", "difficulty", "question_type",
+            "options", "matching_pairs", "match_choices",
+        )
 
     def get_matching_pairs(self, obj):
         if obj.question_type != Question.QuestionType.MATCHING:
@@ -85,6 +88,20 @@ class MatchingPairSerializer(serializers.ModelSerializer):
         fields = ("id", "prompt_text", "match_text")
 
 
+class QuestionImageSerializer(serializers.Serializer):
+    """Multipart payload for AdminQuestionViewSet's `image` sub-action.
+    ImageField runs Pillow to reject anything that isn't a real image;
+    the size cap keeps a stray multi-MB upload out of MEDIA_ROOT."""
+    MAX_BYTES = 5 * 1024 * 1024
+
+    image = serializers.ImageField()
+
+    def validate_image(self, value):
+        if value.size > self.MAX_BYTES:
+            raise serializers.ValidationError("Image must be 5 MB or smaller.")
+        return value
+
+
 OPTION_BASED_TYPES = (Question.QuestionType.MCQ, Question.QuestionType.TRUE_FALSE, Question.QuestionType.MULTI_SELECT)
 
 
@@ -105,6 +122,7 @@ class QuestionAdminSerializer(serializers.ModelSerializer):
             "id",
             "domain",
             "text",
+            "image",
             "difficulty",
             "question_type",
             "cognitive_level",
@@ -117,7 +135,10 @@ class QuestionAdminSerializer(serializers.ModelSerializer):
             "matching_pairs",
             "created_at",
         )
-        read_only_fields = ("created_at",)
+        # `image` is read here (returns its URL); it's written through the
+        # AdminQuestionViewSet `image` sub-action, which takes a multipart
+        # upload -- this JSON serializer never receives the file itself.
+        read_only_fields = ("created_at", "image")
 
     def validate(self, attrs):
         qtype = attrs.get("question_type", getattr(self.instance, "question_type", Question.QuestionType.MCQ))

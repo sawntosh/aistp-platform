@@ -886,6 +886,14 @@ export default function PracticePage() {
                       </span>
                     </div>
                     <p className="mb-2 text-body-sm font-medium text-text-primary">{item.text}</p>
+                    {item.image && (
+                      /* eslint-disable-next-line @next/next/no-img-element */
+                      <img
+                        src={item.image}
+                        alt=""
+                        className="mb-2 max-h-64 rounded-md border border-border object-contain"
+                      />
+                    )}
                     <p className="mb-1 text-body-sm text-text-secondary">
                       Your answer:{" "}
                       <span className={cn("font-medium", item.skipped ? "text-warning" : "text-text-primary")}>

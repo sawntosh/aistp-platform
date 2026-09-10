@@ -69,6 +69,21 @@ export async function deleteQuestion(id) {
   return apiFetch(`/questions/admin/questions/${id}/`, { method: "DELETE" });
 }
 
+// Attach (or replace) a question's image. Multipart -- `file` is a File
+// from an <input type="file">. Returns the updated question.
+export async function uploadQuestionImage(id, file) {
+  const formData = new FormData();
+  formData.append("image", file);
+  return apiFetch(`/questions/admin/questions/${id}/image/`, {
+    method: "POST",
+    body: formData,
+  });
+}
+
+export async function deleteQuestionImage(id) {
+  return apiFetch(`/questions/admin/questions/${id}/image/`, { method: "DELETE" });
+}
+
 // -- Admin: bulk JSON import -------------------------------------------------
 
 export async function importQuestionsFile(file, domainId = null) {

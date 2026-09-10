@@ -14,7 +14,7 @@ from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import generics, mixins, permissions, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.parsers import JSONParser, MultiPartParser
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -38,6 +38,7 @@ from .serializers import (
     GenerationJobCreateSerializer,
     GenerationJobSerializer,
     QuestionAdminSerializer,
+    QuestionImageSerializer,
     QuestionPublicSerializer,
 )
 
@@ -268,7 +269,9 @@ class QuestionListView(APIView):
             session = PracticeSession.objects.create(
                 user=request.user, question_count=len(mock_questions), mode=mode
             )
-            data = QuestionPublicSerializer(mock_questions, many=True).data
+            data = QuestionPublicSerializer(
+                mock_questions, many=True, context={"request": request}
+            ).data
             return Response(
                 {"session_id": session.id, "mode": session.mode, "questions": data}
             )
@@ -298,7 +301,7 @@ class QuestionListView(APIView):
         random.shuffle(questions)
 
         session = PracticeSession.objects.create(user=request.user, question_count=len(questions), mode=mode)
-        data = QuestionPublicSerializer(questions, many=True).data
+        data = QuestionPublicSerializer(questions, many=True, context={"request": request}).data
         return Response({"session_id": session.id, "mode": session.mode, "questions": data})
 
 
@@ -552,7 +555,7 @@ class SessionReviewView(APIView):
             if question is None:
                 # An id in the client list that isn't a real question -- ignore it.
                 continue
-            results.append(self._review_entry(question, attempt))
+            results.append(self._review_entry(question, attempt, request))
 
         return Response(
             {
@@ -594,10 +597,17 @@ class SessionReviewView(APIView):
         return list(answered_ids)
 
     @staticmethod
-    def _review_entry(question, attempt):
+    def _review_entry(question, attempt, request=None):
         """One review row. `attempt` is None for a skipped question, which
         reads as incorrect with an empty answer but still reveals the key."""
         qtype = question.question_type
+        image_url = None
+        if question.image:
+            image_url = (
+                request.build_absolute_uri(question.image.url)
+                if request is not None
+                else question.image.url
+            )
 
         your_answer = {}
         if attempt is not None:
@@ -622,6 +632,7 @@ class SessionReviewView(APIView):
             "question_id": question.id,
             "domain": DomainSerializer(question.domain).data,
             "text": question.text,
+            "image": image_url,
             "question_type": qtype,
             "difficulty": question.difficulty,
             "options": [{"id": opt.id, "text": opt.text} for opt in question.options.all()],
@@ -669,6 +680,34 @@ class AdminQuestionViewSet(viewsets.ModelViewSet):
             except (TypeError, ValueError):
                 queryset = queryset.none()
         return queryset
+
+    @action(
+        detail=True,
+        methods=["post", "delete"],
+        url_path="image",
+        parser_classes=[MultiPartParser, FormParser],
+    )
+    def image(self, request, pk=None):
+        """FR-06: attach or remove the question's diagram/screenshot.
+
+        POST  multipart with field `image` -> stores it (replacing any
+              existing file) and returns the updated question.
+        DELETE -> clears the image and returns the updated question.
+        """
+        question = self.get_object()
+
+        if request.method == "DELETE":
+            if question.image:
+                question.image.delete(save=True)
+            return Response(self.get_serializer(question).data)
+
+        serializer = QuestionImageSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        # Drop the previous file rather than orphaning it in MEDIA_ROOT.
+        question.image.delete(save=False)
+        question.image = serializer.validated_data["image"]
+        question.save(update_fields=["image"])
+        return Response(self.get_serializer(question).data)
 
     @action(detail=False, methods=["post"], url_path="import", parser_classes=[MultiPartParser, JSONParser])
     def import_from_json(self, request):
