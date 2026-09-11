@@ -17,6 +17,15 @@ import {
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
+function formatDate(iso) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+
 const DIFFICULTIES = ["easy", "medium", "hard"];
 const EMPTY_OPTION = { text: "", is_correct: false };
 const EMPTY_BLANK_ANSWER = { answer_text: "" };
@@ -647,6 +656,7 @@ export default function AdminPage() {
                     <th className="py-2 pr-4">Domain</th>
                     <th className="py-2 pr-4">Type</th>
                     <th className="py-2 pr-4">Difficulty</th>
+                    <th className="py-2 pr-4">Date</th>
                     <th className="py-2 pr-4">Active</th>
                     <th className="py-2" />
                   </tr>
@@ -670,6 +680,7 @@ export default function AdminPage() {
                         {QUESTION_TYPES.find((t) => t.value === q.question_type)?.label ?? q.question_type}
                       </td>
                       <td className="py-2 pr-4 capitalize text-gray-600">{q.difficulty}</td>
+                      <td className="py-2 pr-4 text-gray-600">{formatDate(q.created_at)}</td>
                       <td className="py-2 pr-4 text-gray-600">{q.is_active ? "Yes" : "No"}</td>
                       <td className="py-2 text-right">
                         <button
@@ -687,7 +698,7 @@ export default function AdminPage() {
                   ))}
                   {!questions.length && (
                     <tr>
-                      <td colSpan={6} className="py-6 text-center text-gray-400">
+                      <td colSpan={7} className="py-6 text-center text-gray-400">
                         No questions yet.
                       </td>
                     </tr>
