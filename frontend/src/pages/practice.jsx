@@ -55,14 +55,14 @@ const MODES = [
     label: "Real Exam",
     icon: ClipboardCheck,
     description:
-      "Answer every question, then submit to see your score and review the answers.",
+      "Answer every question, then submit to see your score and review the answers. Pass and you'll earn an AISTP certificate.",
   },
   {
     value: "mock",
     label: "ISTQB Mock Test",
     icon: GraduationCap,
     description:
-      "Take a 40-question CTFL mock test using questions from the question bank.",
+      "Take a 40-question CTFL mock test using questions from the question bank. Pass and you'll earn an AISTP certificate.",
   },
 ];
 
