@@ -4,7 +4,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "./ui/Card";
 import Badge from "./ui/Badge";
 import Progress from "./ui/Progress";
 
-const WEAK_THRESHOLD = 60;
+const WEAK_THRESHOLD = 65;
 
 export default function WeakestDomainsPanel({ status, domains, selectedDomainIds, onToggleDomain }) {
   return (
