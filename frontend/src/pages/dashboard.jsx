@@ -259,7 +259,7 @@ export default function DashboardPage() {
               <CardContent>
                 <SectionHeader
                   title="Accuracy by domain"
-                  description="Ranked weakest first · 60% is the practice threshold"
+                  description="Ranked weakest first · 65% is the practice threshold"
                   className="mb-4"
                 />
                 <DomainAccuracyBars domains={domains} />

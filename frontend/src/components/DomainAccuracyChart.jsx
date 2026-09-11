@@ -1,6 +1,6 @@
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
-const WEAK_THRESHOLD = 60;
+const WEAK_THRESHOLD = 65;
 const COLOR_OK = "#16a34a"; // green-600 -- reads as "good" alongside the red weak-domain flag
 const COLOR_WEAK = "#dc2626"; // red-600 -- flags domains below the weak threshold (FR-05 weakest domains)
 
