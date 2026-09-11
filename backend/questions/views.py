@@ -665,7 +665,7 @@ class AdminQuestionViewSet(viewsets.ModelViewSet):
         Question.objects.all()
         .select_related("domain")
         .prefetch_related("options", "blank_answers", "matching_pairs")
-        .order_by("-id")
+        .order_by("-created_at", "-id")
     )
     serializer_class = QuestionAdminSerializer
 
