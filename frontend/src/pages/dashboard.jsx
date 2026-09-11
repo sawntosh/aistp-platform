@@ -144,7 +144,7 @@ export default function DashboardPage() {
             variant="test"
             title="Test Mode"
             description="Answer exam-style questions and track your score."
-            bullets={["Scoring and analytics included."]}
+            bullets={["Scoring and analytics included.", "Pass the Real Exam and earn an AISTP certificate."]}
             ctaLabel="Start test"
             href="/practice"
           />
