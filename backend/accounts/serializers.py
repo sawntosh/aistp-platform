@@ -16,7 +16,7 @@ USERNAME_MIN_LENGTH = 3
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ("id", "username", "email", "role", "email_verified")
+        fields = ("id", "username", "email", "role", "email_verified", "date_joined")
 
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -102,6 +102,22 @@ class ResendVerificationSerializer(serializers.Serializer):
 
 class PasswordResetRequestSerializer(serializers.Serializer):
     email = serializers.EmailField()
+
+
+class ChangePasswordSerializer(serializers.Serializer):
+    """Payload for ChangePasswordView. Unlike the reset flow, the caller is
+    already authenticated -- the old password stands in for the emailed
+    code as proof of ownership."""
+    old_password = serializers.CharField(write_only=True)
+    new_password = serializers.CharField(write_only=True)
+    confirm_new_password = serializers.CharField(write_only=True)
+
+    def validate(self, attrs):
+        if attrs["new_password"] != attrs["confirm_new_password"]:
+            raise serializers.ValidationError(
+                {"confirm_new_password": "Passwords do not match."}
+            )
+        return attrs
 
 
 class PasswordResetConfirmSerializer(serializers.Serializer):

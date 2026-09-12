@@ -144,7 +144,7 @@ export default function DashboardPage() {
             variant="test"
             title="Test Mode"
             description="Answer exam-style questions and track your score."
-            bullets={["Scoring and analytics included."]}
+            bullets={["Scoring and analytics included.", "Pass the Real Exam and earn an AISTP certificate."]}
             ctaLabel="Start test"
             href="/practice"
           />
@@ -259,7 +259,7 @@ export default function DashboardPage() {
               <CardContent>
                 <SectionHeader
                   title="Accuracy by domain"
-                  description="Ranked weakest first · 60% is the practice threshold"
+                  description="Ranked weakest first · 65% is the practice threshold"
                   className="mb-4"
                 />
                 <DomainAccuracyBars domains={domains} />

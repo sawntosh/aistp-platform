@@ -1,7 +1,7 @@
 import { Check, AlertTriangle } from "lucide-react";
 import Badge from "./ui/Badge";
 
-const PRACTICE_THRESHOLD = 60;
+const PRACTICE_THRESHOLD = 65;
 
 export default function FocusAreaThresholdTag({ accuracy }) {
   const isOnTrack = accuracy >= PRACTICE_THRESHOLD;

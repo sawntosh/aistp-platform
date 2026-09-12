@@ -28,6 +28,7 @@ from .models import EmailOTP
 from .serializers import (
     USERNAME_MIN_LENGTH,
     USERNAME_RE,
+    ChangePasswordSerializer,
     EmailVerificationSerializer,
     PasswordResetConfirmSerializer,
     PasswordResetRequestSerializer,
@@ -284,3 +285,33 @@ class MeView(generics.RetrieveAPIView):
 
     def get_object(self):
         return self.request.user
+
+
+class ChangePasswordView(APIView):
+    """POST {old_password, new_password, confirm_new_password} -> updates
+    the authenticated user's password. Reuses the same
+    AUTH_PASSWORD_VALIDATORS policy as registration and password reset."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        serializer = ChangePasswordSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        user = request.user
+        if not user.check_password(serializer.validated_data["old_password"]):
+            return Response(
+                {"old_password": ["Current password is incorrect."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        new_password = serializer.validated_data["new_password"]
+        try:
+            validate_password(new_password, user=user)
+        except DjangoValidationError as exc:
+            return Response(
+                {"new_password": list(exc.messages)}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        user.set_password(new_password)
+        user.save(update_fields=["password"])
+        return Response({"detail": "Your password has been updated."})

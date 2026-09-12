@@ -2,7 +2,7 @@ import { AlertTriangle } from "lucide-react";
 import EmptyState from "./ui/EmptyState";
 import Progress from "./ui/Progress";
 
-const WEAK_THRESHOLD = 60;
+const WEAK_THRESHOLD = 65;
 
 export default function DomainAccuracyBars({ domains }) {
   if (!domains?.length) {

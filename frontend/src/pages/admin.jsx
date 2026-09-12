@@ -17,6 +17,15 @@ import {
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
+function formatDate(iso) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+
 const DIFFICULTIES = ["easy", "medium", "hard"];
 const EMPTY_OPTION = { text: "", is_correct: false };
 const EMPTY_BLANK_ANSWER = { answer_text: "" };
@@ -436,8 +445,7 @@ export default function AdminPage() {
         <section className="rounded-xl bg-white p-6 shadow">
           <h2 className="text-lg font-semibold text-gray-900">Generate from document</h2>
           <p className="mt-1 text-sm text-gray-500">
-            Upload the ISTQB Content as a PDF or DOCX. Groq retrieves the relevant syllabus context
-            for each learning objective and writes new questions straight into the question bank.
+            Upload the ISTQB Content as a PDF or DOCX
           </p>
           <form onSubmit={handleGenerate} className="mt-4 space-y-4">
             <div className="flex flex-wrap items-center gap-4">
@@ -455,7 +463,7 @@ export default function AdminPage() {
                   max={30}
                   value={genTargetPerDomain}
                   onChange={(e) => setGenTargetPerDomain(Number(e.target.value))}
-                  className="w-20 rounded-lg border border-gray-200 px-2 py-1 text-sm"
+                  className="w-20 rounded-lg border border-gray-200 bg-white px-2 py-1 text-sm text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
                 />
               </label>
             </div>
@@ -545,8 +553,7 @@ export default function AdminPage() {
           <h2 className="text-lg font-semibold text-gray-900">Import from JSON</h2>
           <p className="mt-1 text-sm text-gray-500">
             Upload a JSON file containing an array of questions (Domain, Difficulty, Question Text, Option
-            A-D, Correct Option, ...). Domains are matched by name and created automatically if new — or
-            pick a domain below to use it for every question in the file, overriding whatever each row says.
+            A-D, Correct Option, ...)
           </p>
           <form onSubmit={handleImport} className="mt-4 flex flex-wrap items-center gap-3">
             <input
@@ -560,7 +567,7 @@ export default function AdminPage() {
               onChange={(e) => setImportDomainId(e.target.value)}
               className="rounded-lg border border-gray-200 px-3 py-2 text-sm"
             >
-              <option value="">Use each row&apos;s Domain field</option>
+              <option value="">Choose Domain</option>
               {domains.map((d) => (
                 <option key={d.id} value={d.id}>
                   {d.name}
@@ -647,6 +654,7 @@ export default function AdminPage() {
                     <th className="py-2 pr-4">Domain</th>
                     <th className="py-2 pr-4">Type</th>
                     <th className="py-2 pr-4">Difficulty</th>
+                    <th className="py-2 pr-4">Date</th>
                     <th className="py-2 pr-4">Active</th>
                     <th className="py-2" />
                   </tr>
@@ -670,6 +678,7 @@ export default function AdminPage() {
                         {QUESTION_TYPES.find((t) => t.value === q.question_type)?.label ?? q.question_type}
                       </td>
                       <td className="py-2 pr-4 capitalize text-gray-600">{q.difficulty}</td>
+                      <td className="py-2 pr-4 text-gray-600">{formatDate(q.created_at)}</td>
                       <td className="py-2 pr-4 text-gray-600">{q.is_active ? "Yes" : "No"}</td>
                       <td className="py-2 text-right">
                         <button
@@ -687,7 +696,7 @@ export default function AdminPage() {
                   ))}
                   {!questions.length && (
                     <tr>
-                      <td colSpan={6} className="py-6 text-center text-gray-400">
+                      <td colSpan={7} className="py-6 text-center text-gray-400">
                         No questions yet.
                       </td>
                     </tr>
