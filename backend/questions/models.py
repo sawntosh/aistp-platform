@@ -156,6 +156,12 @@ class PracticeSession(models.Model):
     finished_at = models.DateTimeField(null=True, blank=True)
     question_count = models.PositiveIntegerField()
     score = models.PositiveIntegerField(null=True, blank=True)
+    # The exact, ordered question ids served for this session -- recorded at
+    # creation time so an unfinished Practice Mode session can be resumed
+    # later with the identical question set/order instead of a fresh draw.
+    # Left empty ([]) for sessions created before this field existed; those
+    # simply aren't resumable.
+    question_ids = models.JSONField(default=list, blank=True)
 
     def __str__(self):
         return f"Session {self.id} - {self.user}"
