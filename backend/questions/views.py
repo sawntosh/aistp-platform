@@ -267,7 +267,10 @@ class QuestionListView(APIView):
             )
             random.shuffle(mock_questions)
             session = PracticeSession.objects.create(
-                user=request.user, question_count=len(mock_questions), mode=mode
+                user=request.user,
+                question_count=len(mock_questions),
+                mode=mode,
+                question_ids=[q.id for q in mock_questions],
             )
             data = QuestionPublicSerializer(
                 mock_questions, many=True, context={"request": request}
@@ -300,7 +303,12 @@ class QuestionListView(APIView):
         )
         random.shuffle(questions)
 
-        session = PracticeSession.objects.create(user=request.user, question_count=len(questions), mode=mode)
+        session = PracticeSession.objects.create(
+            user=request.user,
+            question_count=len(questions),
+            mode=mode,
+            question_ids=[q.id for q in questions],
+        )
         data = QuestionPublicSerializer(questions, many=True, context={"request": request}).data
         return Response({"session_id": session.id, "mode": session.mode, "questions": data})
 
@@ -650,6 +658,155 @@ class SessionReviewView(APIView):
             "low_confidence_correct": is_low_confidence_correct(confidence, is_correct),
             **build_reveal_payload(question),
         }
+
+
+class ResumableSessionsView(APIView):
+    """Practice Mode only: unfinished sessions the learner can pick back up
+    -- powers the "Resume practice" stack on the setup screen. Only
+    sessions that recorded their served question set (`question_ids`) are
+    eligible; sessions created before that field existed (or the Real
+    Exam / ISTQB Mock Test, which are never resumable) are simply excluded
+    rather than offered as broken resume links.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    _MAX_RESULTS = 10
+
+    @extend_schema(
+        responses=OpenApiTypes.OBJECT,
+        summary="List resumable Practice Mode sessions",
+        description="Unfinished, Save & Exit'd Practice Mode sessions for the current user, most recent first.",
+    )
+    def get(self, request):
+        sessions = (
+            PracticeSession.objects.filter(
+                user=request.user,
+                mode=PracticeSession.Mode.PRACTICE,
+                finished_at__isnull=True,
+            )
+            .exclude(question_ids=[])
+            .order_by("-started_at")[: self._MAX_RESULTS]
+        )
+
+        results = []
+        for session in sessions:
+            answered_count = session.attempts.count()
+            # Nothing left to pick back up if every served question already
+            # has an attempt -- don't offer it as "resumable".
+            if answered_count >= session.question_count:
+                continue
+            domain_names = list(
+                Question.objects.filter(id__in=session.question_ids)
+                .order_by("domain__name")
+                .values_list("domain__name", flat=True)
+                .distinct()
+            )
+            results.append(
+                {
+                    "session_id": session.id,
+                    "started_at": session.started_at,
+                    "question_count": session.question_count,
+                    "answered_count": answered_count,
+                    "domains": domain_names,
+                }
+            )
+
+        return Response(results)
+
+
+class SessionResumeView(APIView):
+    """Practice Mode only: reload a Save & Exit'd session -- its exact
+    question set (in original serving order) plus every attempt already
+    recorded, reshaped into the same per-question "correct answer" reveal
+    AnswerSubmitView returns for Practice Mode -- so the learner drops back
+    in exactly where they left off, feedback and all.
+
+    DELETE discards the session outright (and its attempts) instead of
+    resuming it -- used when the learner dismisses a card from the
+    "Resume practice" stack without picking it up.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def _get_session(self, request, session_id):
+        return get_object_or_404(
+            PracticeSession,
+            id=session_id,
+            user=request.user,
+            mode=PracticeSession.Mode.PRACTICE,
+            finished_at__isnull=True,
+        )
+
+    @extend_schema(
+        responses=OpenApiTypes.OBJECT,
+        summary="Resume a Practice Mode session",
+        description="Returns the session's original question set plus every attempt recorded so far.",
+    )
+    def get(self, request, session_id):
+        session = self._get_session(request, session_id)
+        if not session.question_ids:
+            return Response(
+                {"detail": "This session can't be resumed."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        questions_by_id = {
+            question.id: question
+            for question in Question.objects.filter(id__in=session.question_ids)
+            .select_related("domain")
+            .prefetch_related("options", "blank_answers", "matching_pairs")
+        }
+        # Preserve the original serving order; silently drop any id whose
+        # question was deleted/deactivated since the session started.
+        ordered_questions = [
+            questions_by_id[qid] for qid in session.question_ids if qid in questions_by_id
+        ]
+
+        attempts = session.attempts.select_related("selected_option").prefetch_related("selected_options")
+
+        attempt_payloads = []
+        for attempt in attempts:
+            question = questions_by_id.get(attempt.question_id)
+            if question is None:
+                continue
+            qtype = question.question_type
+            if qtype in (Question.QuestionType.MCQ, Question.QuestionType.TRUE_FALSE):
+                value = attempt.selected_option_id
+            elif qtype == Question.QuestionType.MULTI_SELECT:
+                value = [opt.id for opt in attempt.selected_options.all()]
+            elif qtype == Question.QuestionType.FILL_BLANK:
+                value = attempt.text_answer
+            else:  # matching
+                value = attempt.matching_response
+
+            attempt_payloads.append(
+                {
+                    "question_id": attempt.question_id,
+                    "is_correct": attempt.is_correct,
+                    "value": value,
+                    **build_reveal_payload(question),
+                }
+            )
+
+        data = QuestionPublicSerializer(ordered_questions, many=True, context={"request": request}).data
+        return Response(
+            {
+                "session_id": session.id,
+                "mode": session.mode,
+                "questions": data,
+                "attempts": attempt_payloads,
+            }
+        )
+
+    @extend_schema(
+        request=None,
+        responses=OpenApiTypes.OBJECT,
+        summary="Discard a resumable Practice Mode session",
+        description="Deletes the session and its attempts permanently.",
+    )
+    def delete(self, request, session_id):
+        session = self._get_session(request, session_id)
+        session.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class AdminQuestionViewSet(viewsets.ModelViewSet):

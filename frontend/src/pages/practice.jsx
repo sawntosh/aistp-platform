@@ -4,8 +4,11 @@ import { AlertTriangle, ArrowRight, Award, Brain, Check, CircleSlash, ClipboardC
 import { useAuth } from "../context/AuthContext";
 import { usePracticeSession } from "../context/PracticeSessionContext";
 import {
+  discardSession,
   fetchDomains,
   fetchPracticeQuestions,
+  fetchResumableSessions,
+  fetchResumeSession,
   fetchSessionReview,
   finishSession,
   submitAnswer,
@@ -22,6 +25,7 @@ import QuestionNavigator from "../components/question/QuestionNavigator";
 import AiExplainPanel from "../components/question/AiExplainPanel";
 import Pagination from "../components/question/Pagination";
 import ConfirmModal from "../components/ConfirmModal";
+import ResumeSessionsPanel from "../components/ResumeSessionsPanel";
 import WeakestDomainsPanel from "../components/WeakestDomainsPanel";
 import Alert from "../components/ui/Alert";
 import Badge from "../components/ui/Badge";
@@ -131,6 +135,13 @@ export default function PracticePage() {
   const [domainAccuracy, setDomainAccuracy] = useState(null);
   const [analyticsStatus, setAnalyticsStatus] = useState("guest"); // guest | loading | ready
 
+  // Practice Mode only: Save & Exit'd sessions the learner can resume,
+  // shown as a small card stack above "Focus areas". Real Exam / ISTQB
+  // Mock Test never appear here -- they can't be paused.
+  const [resumableSessions, setResumableSessions] = useState([]);
+  const [resumableStatus, setResumableStatus] = useState("guest"); // guest | loading | ready
+  const [resumingSessionId, setResumingSessionId] = useState(null);
+
   // The full ordered question list for the session. PER_PAGE questions
   // show at once and the learner pages through them (or jumps via the
   // navigator); per-question answer / result / submitted state lives in
@@ -202,6 +213,25 @@ export default function PracticePage() {
       })
       .catch(() => setAnalyticsStatus("guest"));
   }, [user]);
+
+  // Refetch the resumable-session stack whenever the learner lands back on
+  // the setup screen -- covers the very first load, returning from a
+  // finished session, and a fresh Save & Exit.
+  useEffect(() => {
+    if (!user) {
+      setResumableStatus("guest");
+      setResumableSessions([]);
+      return;
+    }
+    if (sessionStarted) return;
+    setResumableStatus("loading");
+    fetchResumableSessions()
+      .then((data) => {
+        setResumableSessions(data);
+        setResumableStatus("ready");
+      })
+      .catch(() => setResumableStatus("guest"));
+  }, [user, sessionStarted]);
 
   // Cross-reference analytics (domain name + accuracy) with the domain
   // filter list (id + name) so "Add to session" can toggle a real filter.
@@ -316,6 +346,74 @@ export default function PracticePage() {
     setQuestions([]);
     setIsSessionComplete(false);
     setLoadError("");
+  }
+
+  // Practice Mode only: reload a Save & Exit'd session's exact question set
+  // and every attempt already recorded for it, then drop the learner back
+  // in right where they left off -- already-answered questions render with
+  // their saved feedback, same as if they'd never left.
+  async function resumeSession(sessionId) {
+    setResumingSessionId(sessionId);
+    setLoadError("");
+    try {
+      const data = await fetchResumeSession(sessionId);
+      const nextAnswers = {};
+      const nextResults = {};
+      const nextSubmitted = new Set();
+      let correct = 0;
+      for (const attempt of data.attempts) {
+        const question = data.questions.find((q) => q.id === attempt.question_id);
+        nextAnswers[attempt.question_id] = attempt.value;
+        nextSubmitted.add(attempt.question_id);
+        nextResults[attempt.question_id] = {
+          isCorrect: attempt.is_correct,
+          correctOptionId: attempt.correct_option_id,
+          correctOptionIds: attempt.correct_option_ids,
+          correctOptionTexts: attempt.correct_option_texts,
+          correctAnswer: attempt.correct_answer,
+          correctPairing: attempt.correct_pairing,
+          correctAnswerText: question ? describeCorrectAnswer(question, attempt) : "",
+        };
+        if (attempt.is_correct) correct += 1;
+      }
+
+      const firstUnansweredIdx = data.questions.findIndex((q) => !nextSubmitted.has(q.id));
+      const startIndex = firstUnansweredIdx === -1 ? 0 : firstUnansweredIdx;
+
+      setMode("practice");
+      setQuestions(data.questions);
+      setTotalCount(data.questions.length);
+      setCurrentPage(Math.floor(startIndex / PER_PAGE));
+      setCurrentIndex(startIndex);
+      setSessionId(data.session_id);
+      setAnswersById(nextAnswers);
+      setConfidenceById({});
+      setResultsById(nextResults);
+      setSubmittedIds(nextSubmitted);
+      setFlaggedIds(new Set());
+      setElapsedSeconds(0);
+      setCorrectCount(correct);
+      setFinalScore(null);
+      setTestReview(null);
+      setIsSessionComplete(false);
+      setSessionStarted(true);
+    } catch (err) {
+      setLoadError(err?.body?.detail || "Couldn't resume that session. Try again.");
+    } finally {
+      setResumingSessionId(null);
+    }
+  }
+
+  // Removes a card from the "Resume practice" stack without picking it up
+  // -- optimistic on the list; a failed delete just means it reappears the
+  // next time the list refreshes.
+  async function discardResumableSession(sessionId) {
+    setResumableSessions((prev) => prev.filter((s) => s.session_id !== sessionId));
+    try {
+      await discardSession(sessionId);
+    } catch {
+      // Best-effort -- see comment above.
+    }
   }
 
   const pageCount = Math.max(1, Math.ceil(questions.length / PER_PAGE));
@@ -810,12 +908,21 @@ export default function PracticePage() {
         </div>
 
         {mode === "practice" && (
-          <WeakestDomainsPanel
-            status={analyticsStatus}
-            domains={weakestDomains}
-            selectedDomainIds={selectedDomainIds}
-            onToggleDomain={addDomainFilter}
-          />
+          <div className="space-y-6 lg:sticky lg:top-24">
+            <ResumeSessionsPanel
+              status={resumableStatus}
+              sessions={resumableSessions}
+              onResume={resumeSession}
+              onDiscard={discardResumableSession}
+              resumingId={resumingSessionId}
+            />
+            <WeakestDomainsPanel
+              status={analyticsStatus}
+              domains={weakestDomains}
+              selectedDomainIds={selectedDomainIds}
+              onToggleDomain={addDomainFilter}
+            />
+          </div>
         )}
         </div>
       </div>
@@ -1110,6 +1217,13 @@ export default function PracticePage() {
                   <Badge tone="test">Score {correctCount}</Badge>
                   <button
                     type="button"
+                    onClick={backToSetup}
+                    className="cursor-pointer rounded-full border border-border px-2.5 py-0.5 font-medium text-text-muted transition-colors hover:border-test/30 hover:bg-test-muted hover:text-test"
+                  >
+                    Save &amp; exit
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setShowEndConfirm(true)}
                     className="cursor-pointer rounded-full border border-border px-2.5 py-0.5 font-medium text-text-muted transition-colors hover:border-error/30 hover:bg-error-muted hover:text-error"
                   >
@@ -1276,7 +1390,7 @@ export default function PracticePage() {
                     } will be marked incorrect.`
                   : ""
               }`
-            : "Your progress so far will be saved, but you won't be able to resume these remaining questions."
+            : "This finishes the session for good and can't be resumed afterward. To come back to it later instead, use Save & exit."
         }
         confirmLabel={isExamLike ? `Submit ${isMock ? "mock test" : "exam"}` : "End session"}
         cancelLabel={isExamLike ? "Keep working" : "Keep practicing"}

@@ -35,6 +35,26 @@ export async function fetchSessionReview(sessionId, questionIds = []) {
   return apiFetch(`/questions/sessions/${sessionId}/review/${query}`);
 }
 
+// -- Practice Mode: resume a Save & Exit'd session --------------------------
+
+// Unfinished Practice Mode sessions the learner can pick back up, most
+// recent first. Real Exam / ISTQB Mock Test sessions never appear here --
+// they can't be paused.
+export async function fetchResumableSessions() {
+  return apiFetch("/questions/sessions/resumable/");
+}
+
+// The session's original question set (in serving order) plus every
+// attempt already recorded for it.
+export async function fetchResumeSession(sessionId) {
+  return apiFetch(`/questions/sessions/${sessionId}/resume/`);
+}
+
+// Deletes an unfinished session outright instead of resuming it.
+export async function discardSession(sessionId) {
+  return apiFetch(`/questions/sessions/${sessionId}/resume/`, { method: "DELETE" });
+}
+
 // -- Admin: domains --------------------------------------------------------
 
 export async function fetchDomains() {
