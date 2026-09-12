@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { LogOut } from "lucide-react";
+import Link from "next/link";
+import { LogOut, User as UserIcon } from "lucide-react";
 import UserAvatar from "./UserAvatar";
 import { cn } from "../lib/cn";
 
@@ -79,6 +80,15 @@ export default function UserMenu({
             <span className="truncate text-body-sm font-semibold text-text-primary">{name}</span>
           </div>
           <div className="my-1 border-t border-border" />
+          <Link
+            href="/profile"
+            role="menuitem"
+            onClick={() => setIsOpen(false)}
+            className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-body-sm font-medium text-text-secondary transition-colors hover:bg-surface-muted hover:text-text-primary"
+          >
+            <UserIcon className="h-4 w-4" aria-hidden="true" />
+            Profile
+          </Link>
           <button
             type="button"
             role="menuitem"
