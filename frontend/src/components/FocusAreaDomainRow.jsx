@@ -2,7 +2,7 @@ import { cn } from "../lib/cn";
 import Progress from "./ui/Progress";
 import FocusAreaThresholdTag from "./FocusAreaThresholdTag";
 
-const PRACTICE_THRESHOLD = 60;
+const PRACTICE_THRESHOLD = 65;
 
 export default function FocusAreaDomainRow({ domainName, accuracy, onAddToSession }) {
   const isOnTrack = accuracy >= PRACTICE_THRESHOLD;
