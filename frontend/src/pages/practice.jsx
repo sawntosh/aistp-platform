@@ -124,7 +124,7 @@ export default function PracticePage() {
   const [selectedDomainIds, setSelectedDomainIds] = useState([]);
   const [sessionLength, setSessionLength] = useState(10);
   const [isCustomLength, setIsCustomLength] = useState(false);
-  const [customLengthInput, setCustomLengthInput] = useState("15");
+  const [customLengthInput, setCustomLengthInput] = useState(String(MIN_CUSTOM_LENGTH));
   const [mode, setMode] = useState("practice");
 
   // Personalized "focus areas" sidebar: weakest domains from past sessions.
@@ -256,11 +256,26 @@ export default function PracticePage() {
     setSelectedDomainIds((prev) => (prev.includes(domainId) ? prev : [...prev, domainId]));
   }
 
+  function clampCustomLength(raw) {
+    const parsed = parseInt(raw, 10);
+    if (Number.isNaN(parsed)) return MIN_CUSTOM_LENGTH;
+    return Math.min(MAX_CUSTOM_LENGTH, Math.max(MIN_CUSTOM_LENGTH, parsed));
+  }
+
   function handleCustomLengthChange(raw) {
     setCustomLengthInput(raw);
     const parsed = parseInt(raw, 10);
     if (Number.isNaN(parsed)) return;
-    setSessionLength(Math.min(MAX_CUSTOM_LENGTH, Math.max(MIN_CUSTOM_LENGTH, parsed)));
+    setSessionLength(clampCustomLength(raw));
+  }
+
+  // Clamp the visible field too once the learner leaves it, so a value
+  // like "4" doesn't sit on screen next to a session that will actually
+  // run with the enforced minimum of 5.
+  function handleCustomLengthBlur() {
+    const clamped = clampCustomLength(customLengthInput);
+    setCustomLengthInput(String(clamped));
+    setSessionLength(clamped);
   }
 
   async function startSession() {
@@ -741,7 +756,14 @@ export default function PracticePage() {
                   </OptionTile>
                 );
               })}
-              <OptionTile isSelected={isCustomLength} onClick={() => setIsCustomLength(true)} className="text-center">
+              <OptionTile
+                isSelected={isCustomLength}
+                onClick={() => {
+                  setIsCustomLength(true);
+                  setSessionLength(clampCustomLength(customLengthInput));
+                }}
+                className="text-center"
+              >
                 <span className="flex items-center justify-center">
                   <Sliders className={cn("h-6 w-6", isCustomLength ? "text-test" : "text-text-muted")} aria-hidden="true" />
                 </span>
@@ -762,6 +784,7 @@ export default function PracticePage() {
                   max={MAX_CUSTOM_LENGTH}
                   value={customLengthInput}
                   onChange={(e) => handleCustomLengthChange(e.target.value)}
+                  onBlur={handleCustomLengthBlur}
                   className="h-10 w-20 rounded-md border border-border-strong bg-surface px-3 text-center text-body font-semibold text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-test"
                 />
                 <span className="text-caption text-text-muted">
