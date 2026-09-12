@@ -410,6 +410,56 @@ class JwtProtectedEndpointTests(APITestCase):
         self.assertEqual(self.client.get("/api/auth/me/").status_code, 401)
 
 
+class ChangePasswordTests(APITestCase):
+    def setUp(self):
+        cache.clear()
+        self.user = User.objects.create_user(
+            username="frank", email="frank@gmail.com", password="Str0ngPass!23"
+        )
+        self.user.email_verified = True
+        self.user.save(update_fields=["email_verified"])
+        token = self.client.post(
+            "/api/auth/login/", {"username": "frank", "password": "Str0ngPass!23"}
+        ).data["access"]
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+
+    def _change(self, **overrides):
+        payload = {
+            "old_password": "Str0ngPass!23",
+            "new_password": "NewStr0ngPass!45",
+            "confirm_new_password": "NewStr0ngPass!45",
+            **overrides,
+        }
+        return self.client.post("/api/auth/change-password/", payload)
+
+    def test_requires_authentication(self):
+        self.client.credentials()
+        self.assertEqual(self._change().status_code, 401)
+
+    def test_wrong_old_password_is_rejected(self):
+        resp = self._change(old_password="WrongPass!23")
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("incorrect", str(resp.data["old_password"]).lower())
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("Str0ngPass!23"))
+
+    def test_mismatched_confirmation_is_rejected(self):
+        resp = self._change(confirm_new_password="Different!23")
+        self.assertEqual(resp.status_code, 400)
+
+    def test_weak_new_password_is_rejected(self):
+        resp = self._change(new_password="weak", confirm_new_password="weak")
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("new_password", resp.data)
+
+    def test_successful_change_updates_password(self):
+        resp = self._change()
+        self.assertEqual(resp.status_code, 200)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("NewStr0ngPass!45"))
+        self.assertFalse(self.user.check_password("Str0ngPass!23"))
+
+
 @override_settings(EMAIL_OTP_RESEND_COOLDOWN=0)
 class PasswordResetTests(APITestCase):
     def setUp(self):

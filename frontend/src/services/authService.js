@@ -96,3 +96,14 @@ export function logout() {
   setToken(null);
   setRefreshToken(null);
 }
+
+export async function changePassword({ oldPassword, newPassword, confirmNewPassword }) {
+  return apiFetch("/auth/change-password/", {
+    method: "POST",
+    body: JSON.stringify({
+      old_password: oldPassword,
+      new_password: newPassword,
+      confirm_new_password: confirmNewPassword,
+    }),
+  });
+}
