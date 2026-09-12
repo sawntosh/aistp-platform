@@ -8,7 +8,7 @@ const WEAK_THRESHOLD = 60;
 
 export default function WeakestDomainsPanel({ status, domains, selectedDomainIds, onToggleDomain }) {
   return (
-    <Card className="lg:sticky lg:top-24">
+    <Card>
       <CardHeader className="flex-row items-center gap-2 space-y-0 pb-0">
         <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-test-muted text-test">
           <TrendingDown className="h-4 w-4" aria-hidden="true" />
