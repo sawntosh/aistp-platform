@@ -66,7 +66,7 @@ const MODES = [
     label: "ISTQB Mock Test",
     icon: GraduationCap,
     description:
-      "Take a 40-question CTFL mock test using questions from the question bank. Pass and you'll earn an AISTP certificate.",
+      "Take a CTFL mock test using questions from the question bank.",
   },
 ];
 
