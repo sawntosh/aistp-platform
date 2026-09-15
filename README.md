@@ -60,13 +60,6 @@ tracking, and domain-level performance analytics.
 
 ### Backend
 
-```bash
-cd backend
-python -m venv venv
-venv\Scripts\activate        # Windows  (source venv/bin/activate on macOS/Linux)
-pip install -r requirements.txt
-```
-
 Create `backend/.env`:
 ```env
 SECRET_KEY=your-django-secret-key
@@ -74,17 +67,36 @@ DATABASE_URL=your-postgres-connection-string   # omit to use local sqlite
 GROQ_API_KEY=your-groq-api-key
 ```
 
-Run it:
+**First time only** (Windows, requires Python 3.12 — see note below):
+```powershell
+cd backend
+py -3.12 -m venv venv
+```
+
+**Every time you work on the backend** (Windows):
+```powershell
+cd backend
+.\dev.ps1
+```
+`dev.ps1` activates nothing manually needed — it drives the venv's own Python directly. It installs `requirements.txt` only when the file has changed since the last run, applies pending migrations, seeds the question bank and Study Mode content (both commands skip themselves once the database is already populated), and then starts `runserver`. After the first run, re-running it just starts the server in a couple of seconds instead of redoing all of the above.
+
+On macOS/Linux, or if you'd rather run the steps yourself:
 ```bash
+cd backend
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
 python manage.py migrate
 python manage.py seed_questions        # bundled ISTQB CTFL v4.0 question bank
 python manage.py seed_study_content    # Study Mode topics + reading content
 python manage.py runserver
 ```
 
-> **`seed_questions`** loads `backend/questions/fixtures/seed_questions.json` (the full question bank, versioned in git) into whatever database `DATABASE_URL` points to. Run it once per fresh database so every clone/teammate ends up with the same questions instead of relying on a local `db.sqlite3` (gitignored, never shared). Pass `--force` to re-import on top of existing data.
+> **`seed_questions`** loads `backend/questions/fixtures/seed_questions.json` (the full question bank, versioned in git) into whatever database `DATABASE_URL` points to. It's safe to run on every startup: it checks the database first and skips itself once questions already exist, so every clone/teammate ends up with the same questions instead of relying on a local `db.sqlite3` (gitignored, never shared). Pass `--force` to re-import on top of existing data.
 >
-> **`seed_study_content`** populates the `study` app's topics and reading material. Run it once per fresh database; Study Mode shows "no topics yet" until it does.
+> **`seed_study_content`** populates the `study` app's topics and reading material. Also safe to re-run — every write is `update_or_create`.
+>
+> **Python version note:** this project's compiled dependencies (`pydantic_core`, etc.) need Python 3.12. If your machine's default `python`/`py` resolves to a newer version (e.g. 3.14) and the server fails with `ModuleNotFoundError: No module named 'pydantic_core._pydantic_core'`, recreate the venv with `py -3.12 -m venv venv` explicitly.
 
 ### Frontend
 
