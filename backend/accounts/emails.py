@@ -15,6 +15,7 @@ address is registered.
 """
 import hashlib
 import hmac
+import logging
 import secrets
 
 from django.conf import settings
@@ -22,6 +23,8 @@ from django.core.mail import send_mail
 from django.utils import timezone
 
 from .models import EmailOTP
+
+logger = logging.getLogger(__name__)
 
 CODE_LENGTH = 6
 
@@ -103,13 +106,18 @@ def _minutes() -> int:
 
 
 def _send(user, subject: str, body: str) -> None:
-    send_mail(
-        subject,
-        body,
-        settings.DEFAULT_FROM_EMAIL,
-        [user.email],
-        fail_silently=True,
-    )
+    try:
+        send_mail(
+            subject,
+            body,
+            settings.DEFAULT_FROM_EMAIL,
+            [user.email],
+            fail_silently=False,
+        )
+    except Exception:
+        # Best-effort: don't 500 the request or leak whether the address is
+        # registered, but make the failure visible (e.g. expired Gmail token).
+        logger.exception("Failed to send email %r to user id=%s", subject, user.pk)
 
 
 def send_verification_code(user) -> None:

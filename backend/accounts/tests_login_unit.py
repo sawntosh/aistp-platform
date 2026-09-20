@@ -20,7 +20,7 @@ class LoginUnitTests(APITestCase):
         cache.clear()  # login-failure lockout counters are cache-backed
         self.password = "Str0ngPass!23"
         self.user = User.objects.create_user(
-            username="keshav", email="kesh@gmail.com", password=self.password
+            username="kesh", email="kesh@gmail.com", password=self.password
         )
         self.user.email_verified = True
         self.user.save(update_fields=["email_verified"])
