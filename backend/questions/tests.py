@@ -356,6 +356,106 @@ class AdminQuestionImportTests(APITestCase):
         self.assertFalse(Domain.objects.filter(name="Domain 1 - Fundamentals of Testing").exists())
 
 
+class AdminImageQuestionImportTests(APITestCase):
+    """Bulk image-based question import: each image becomes one MCQ whose
+    options are A-D, with the admin-chosen letter marked correct."""
+
+    URL = "/api/questions/admin/questions/import-images/"
+
+    def setUp(self):
+        import shutil
+        import tempfile
+
+        from django.test import override_settings
+
+        self._media = tempfile.mkdtemp()
+        override = override_settings(MEDIA_ROOT=self._media)
+        override.enable()
+        self.addCleanup(override.disable)
+        self.addCleanup(shutil.rmtree, self._media, ignore_errors=True)
+
+        self.admin = User.objects.create_user(
+            username="admin6", email="admin6@gmail.com", password="Str0ngPass!23", role=User.Role.ADMIN
+        )
+        self.student = User.objects.create_user(
+            username="student6", email="student6@gmail.com", password="Str0ngPass!23"
+        )
+        self.domain = Domain.objects.create(name="Fundamentals")
+        self.client.force_authenticate(user=self.admin)
+
+    @staticmethod
+    def _png(name="q.png"):
+        import io
+
+        from PIL import Image
+
+        buffer = io.BytesIO()
+        Image.new("RGB", (4, 4), "white").save(buffer, format="PNG")
+        return SimpleUploadedFile(name, buffer.getvalue(), content_type="image/png")
+
+    def _post(self, files, metadata, domain_id=None):
+        return self.client.post(
+            self.URL,
+            {
+                "domain_id": domain_id or self.domain.id,
+                "images": files,
+                "metadata": json.dumps(metadata),
+            },
+            format="multipart",
+        )
+
+    def test_student_cannot_import_images(self):
+        self.client.force_authenticate(user=self.student)
+        response = self._post([self._png()], [{"correct": "A", "difficulty": "easy"}])
+        self.assertEqual(response.status_code, 403)
+
+    def test_imports_each_image_as_an_mcq_with_correct_letter(self):
+        response = self._post(
+            [self._png("a.png"), self._png("b.png")],
+            [{"correct": "B", "difficulty": "easy"}, {"correct": "d", "difficulty": "hard"}],
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data["created"], 2)
+        self.assertEqual(response.data["domains"], {"Fundamentals": 2})
+
+        first, second = Question.objects.order_by("id")
+        for question, correct, difficulty in ((first, "B", "easy"), (second, "D", "hard")):
+            self.assertTrue(question.image)
+            self.assertEqual(question.question_type, Question.QuestionType.MCQ)
+            self.assertEqual(question.difficulty, difficulty)
+            self.assertEqual(question.domain, self.domain)
+            self.assertEqual([o.text for o in question.options.order_by("id")], ["A", "B", "C", "D"])
+            self.assertEqual([o.text for o in question.options.filter(is_correct=True)], [correct])
+
+    def test_bad_row_rejects_whole_batch(self):
+        response = self._post(
+            [self._png("ok.png"), self._png("bad.png")],
+            [{"correct": "A", "difficulty": "easy"}, {"correct": "Z", "difficulty": "easy"}],
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["errors"][0]["row"], 1)
+        self.assertEqual(Question.objects.count(), 0)
+
+    def test_non_image_file_is_rejected(self):
+        fake = SimpleUploadedFile("fake.png", b"not an image", content_type="image/png")
+        response = self._post([fake], [{"correct": "A", "difficulty": "easy"}])
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(Question.objects.count(), 0)
+
+    def test_no_images_is_rejected(self):
+        response = self._post([], [])
+        self.assertEqual(response.status_code, 400)
+
+    def test_metadata_length_must_match_image_count(self):
+        response = self._post([self._png()], [])
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(Question.objects.count(), 0)
+
+    def test_unknown_domain_returns_404(self):
+        response = self._post([self._png()], [{"correct": "A", "difficulty": "easy"}], domain_id=99999)
+        self.assertEqual(response.status_code, 404)
+
+
 class AdminQuestionImportMultiTypeTests(APITestCase):
     """Bulk JSON import across all 5 question types -- rows shaped like a
     real admin-generated export (True/False, Multiple Answer, Fill in

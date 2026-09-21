@@ -33,6 +33,7 @@ exports. Domains are matched/created by exact name, so the same
 lands on a single Domain row.
 """
 from .models import AnswerOption, Domain, FillBlankAnswer, MatchingPair, Question
+from .serializers import QuestionImageSerializer
 
 BASE_REQUIRED_FIELDS = ["Domain", "Difficulty", "Question Text"]
 OPTION_LETTERS = ["A", "B", "C", "D", "E", "F"]
@@ -267,3 +268,84 @@ def import_questions(rows):
         per_domain[domain_name] = per_domain.get(domain_name, 0) + 1
 
     return {"created": created, "domains": per_domain}
+
+
+# -- Image-based questions ---------------------------------------------------
+# The uploaded image *is* the question (a screenshot / diagram that already
+# contains the wording and the choices); the admin only supplies which of
+# A-D is correct. Each becomes an MCQ whose options are the letters.
+
+IMAGE_QUESTION_TEXT = "Refer to the image and choose the correct answer."
+IMAGE_OPTION_LETTERS = OPTION_LETTERS[:4]
+MAX_IMAGES_PER_BATCH = 50
+
+
+def validate_image_batch(files, metadata):
+    """Validate a bulk image upload. `files` and `metadata` are parallel
+    lists: metadata[i] = {"correct": "B", "difficulty": "easy"} describes
+    files[i]. Returns (cleaned, errors) like validate_rows(): all-or-nothing,
+    with errors as {"row": index, "error": msg}."""
+    if not files:
+        return [], [{"row": None, "error": "Choose at least one image."}]
+    if len(files) > MAX_IMAGES_PER_BATCH:
+        return [], [{"row": None, "error": f"Upload at most {MAX_IMAGES_PER_BATCH} images at a time."}]
+    if not isinstance(metadata, list) or len(metadata) != len(files):
+        return [], [{"row": None, "error": "Each image needs a correct answer and difficulty."}]
+
+    cleaned = []
+    errors = []
+    for index, (image_file, meta) in enumerate(zip(files, metadata)):
+        name = getattr(image_file, "name", f"image {index + 1}")
+        if not isinstance(meta, dict):
+            errors.append({"row": index, "error": f"{name}: missing answer details."})
+            continue
+
+        serializer = QuestionImageSerializer(data={"image": image_file})
+        if not serializer.is_valid():
+            reason = "; ".join(str(e) for e in serializer.errors.get("image", ["Invalid image."]))
+            errors.append({"row": index, "error": f"{name}: {reason}"})
+            continue
+
+        correct = str(meta.get("correct", "")).strip().upper()
+        if correct not in IMAGE_OPTION_LETTERS:
+            errors.append({"row": index, "error": f"{name}: choose the correct answer (A-D)."})
+            continue
+
+        difficulty = DIFFICULTY_MAP.get(str(meta.get("difficulty", "medium")).strip().lower())
+        if difficulty is None:
+            errors.append({"row": index, "error": f"{name}: invalid difficulty (expected Easy/Medium/Hard)."})
+            continue
+
+        cleaned.append({"image": serializer.validated_data["image"], "correct": correct, "difficulty": difficulty})
+
+    return cleaned, errors
+
+
+def import_image_questions(domain, rows):
+    """Persist rows produced by validate_image_batch() under `domain`. If
+    anything fails, the transaction rolls the rows back and the image files
+    already written to MEDIA_ROOT are removed so nothing is orphaned."""
+    from django.db import transaction
+
+    created = []
+    try:
+        with transaction.atomic():
+            for row in rows:
+                question = Question.objects.create(
+                    domain=domain,
+                    text=IMAGE_QUESTION_TEXT,
+                    difficulty=row["difficulty"],
+                    question_type=Question.QuestionType.MCQ,
+                    image=row["image"],
+                )
+                created.append(question)
+                AnswerOption.objects.bulk_create(
+                    AnswerOption(question=question, text=letter, is_correct=letter == row["correct"])
+                    for letter in IMAGE_OPTION_LETTERS
+                )
+    except Exception:
+        for question in created:
+            question.image.delete(save=False)
+        raise
+
+    return {"created": len(created), "domains": {domain.name: len(created)}}

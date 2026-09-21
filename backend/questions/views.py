@@ -29,7 +29,7 @@ from .constants import (
     is_high_confidence_mistake,
     is_low_confidence_correct,
 )
-from .imports import import_questions, validate_rows
+from .imports import import_image_questions, import_questions, validate_image_batch, validate_rows
 from .models import AnswerOption, Attempt, Domain, GenerationJob, PracticeSession, Question
 from .pagination import QuestionPagination
 from .serializers import (
@@ -906,6 +906,24 @@ class AdminQuestionViewSet(viewsets.ModelViewSet):
         with transaction.atomic():
             summary = import_questions(cleaned_rows)
         return Response(summary, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=["post"], url_path="import-images", parser_classes=[MultiPartParser])
+    def import_images(self, request):
+        """Bulk-create image-based questions: multipart with `domain_id`,
+        repeated `images` files, and `metadata` -- a JSON array parallel to
+        the files, each item {"correct": "A".."D", "difficulty": "easy"|
+        "medium"|"hard"}. All-or-nothing, like the JSON import."""
+        domain = get_object_or_404(Domain, id=request.data.get("domain_id"))
+        try:
+            metadata = json.loads(request.data.get("metadata") or "[]")
+        except json.JSONDecodeError:
+            return Response({"errors": [{"row": None, "error": "metadata is not valid JSON."}]}, status=status.HTTP_400_BAD_REQUEST)
+
+        cleaned, errors = validate_image_batch(request.FILES.getlist("images"), metadata)
+        if errors:
+            return Response({"errors": errors}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(import_image_questions(domain, cleaned), status=status.HTTP_201_CREATED)
 
 
 class AdminGenerationJobViewSet(

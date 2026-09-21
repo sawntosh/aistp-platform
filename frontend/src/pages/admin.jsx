@@ -10,6 +10,7 @@ import {
   fetchDomains,
   fetchGenerationJob,
   generateQuestionsFromFile,
+  importQuestionImages,
   importQuestionsFile,
   updateQuestion,
   uploadQuestionImage,
@@ -27,6 +28,8 @@ function formatDate(iso) {
 }
 
 const DIFFICULTIES = ["easy", "medium", "hard"];
+const IMAGE_ANSWER_LETTERS = ["A", "B", "C", "D"];
+const MAX_IMAGES_PER_IMPORT = 50;
 const EMPTY_OPTION = { text: "", is_correct: false };
 const EMPTY_BLANK_ANSWER = { answer_text: "" };
 const EMPTY_MATCHING_PAIR = { prompt_text: "", match_text: "" };
@@ -113,6 +116,10 @@ export default function AdminPage() {
   const [importResult, setImportResult] = useState(null);
   const [importErrors, setImportErrors] = useState(null);
   const [isImporting, setIsImporting] = useState(false);
+  // "text" = JSON file import; "image" = bulk image-based questions.
+  const [importMode, setImportMode] = useState("text");
+  const [imageItems, setImageItems] = useState([]); // { id, file, url, correct, difficulty }
+  const [imageDomainId, setImageDomainId] = useState("");
 
   const [genFile, setGenFile] = useState(null);
   const [genTypes, setGenTypes] = useState(QUESTION_TYPES.map((t) => t.value));
@@ -188,6 +195,87 @@ export default function AdminPage() {
       setImportFile(null);
       setImportDomainId("");
       e.target.reset();
+      loadData();
+    } catch (err) {
+      if (err.status === 400 && Array.isArray(err.body?.errors)) {
+        setImportErrors(err.body.errors);
+      } else {
+        setImportErrors([{ row: null, error: getErrorMessage(err, "Import failed.") }]);
+      }
+    } finally {
+      setIsImporting(false);
+    }
+  }
+
+  // -- Bulk image-based import -------------------------------------------
+
+  function switchImportMode(mode) {
+    setImportMode(mode);
+    setImportResult(null);
+    setImportErrors(null);
+  }
+
+  function pickImportImages(fileList) {
+    const files = Array.from(fileList ?? []);
+    const problems = [];
+    const accepted = [];
+    for (const file of files) {
+      if (!file.type.startsWith("image/")) {
+        problems.push({ row: null, error: `${file.name}: not an image file (PNG, JPG, GIF, WebP).` });
+      } else if (file.size > MAX_IMAGE_BYTES) {
+        problems.push({ row: null, error: `${file.name}: image must be 5 MB or smaller.` });
+      } else {
+        accepted.push({
+          id: `${file.name}-${file.size}-${file.lastModified}-${Math.random()}`,
+          file,
+          url: URL.createObjectURL(file),
+          correct: "",
+          difficulty: "medium",
+        });
+      }
+    }
+    if (imageItems.length + accepted.length > MAX_IMAGES_PER_IMPORT) {
+      accepted.forEach((item) => URL.revokeObjectURL(item.url));
+      problems.push({ row: null, error: `Upload at most ${MAX_IMAGES_PER_IMPORT} images at a time.` });
+      setImportErrors(problems);
+      return;
+    }
+    setImportResult(null);
+    setImportErrors(problems.length ? problems : null);
+    setImageItems((items) => [...items, ...accepted]);
+  }
+
+  function updateImageItem(id, patch) {
+    setImageItems((items) => items.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+  }
+
+  function removeImageItem(id) {
+    setImageItems((items) => {
+      const target = items.find((item) => item.id === id);
+      if (target) URL.revokeObjectURL(target.url);
+      return items.filter((item) => item.id !== id);
+    });
+  }
+
+  function setAllImageDifficulty(difficulty) {
+    setImageItems((items) => items.map((item) => ({ ...item, difficulty })));
+  }
+
+  const imageImportReady =
+    imageDomainId !== "" && imageItems.length > 0 && imageItems.every((item) => item.correct !== "");
+
+  async function handleImageImport(e) {
+    e.preventDefault();
+    if (!imageImportReady) return;
+    setIsImporting(true);
+    setImportResult(null);
+    setImportErrors(null);
+    try {
+      const result = await importQuestionImages(imageItems, imageDomainId);
+      setImportResult(result);
+      imageItems.forEach((item) => URL.revokeObjectURL(item.url));
+      setImageItems([]);
+      setImageDomainId("");
       loadData();
     } catch (err) {
       if (err.status === 400 && Array.isArray(err.body?.errors)) {
@@ -550,7 +638,139 @@ export default function AdminPage() {
 
         {/* Bulk JSON import */}
         <section className="rounded-xl bg-white p-6 shadow">
-          <h2 className="text-lg font-semibold text-gray-900">Import from JSON</h2>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold text-gray-900">
+              {importMode === "text" ? "Import from JSON" : "Import image questions"}
+            </h2>
+            <div className="inline-flex rounded-lg bg-gray-100 p-1 text-sm font-medium" role="group" aria-label="Question type">
+              {[
+                { value: "text", label: "Text based" },
+                { value: "image", label: "Image based" },
+              ].map((mode) => (
+                <button
+                  key={mode.value}
+                  type="button"
+                  aria-pressed={importMode === mode.value}
+                  onClick={() => switchImportMode(mode.value)}
+                  className={`rounded-md px-3 py-1.5 ${
+                    importMode === mode.value ? "bg-white text-indigo-700 shadow-sm" : "text-gray-600 hover:text-gray-900"
+                  }`}
+                >
+                  {mode.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {importMode === "image" && (
+            <form onSubmit={handleImageImport} className="mt-1">
+              <p className="text-sm text-gray-500">
+                Each image becomes one multiple-choice question: the image holds the question and its choices,
+                and you mark which of A–D is correct. PNG, JPG, GIF or WebP, up to 5 MB each, max{" "}
+                {MAX_IMAGES_PER_IMPORT} per upload.
+              </p>
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/gif,image/webp"
+                  multiple
+                  value=""
+                  onChange={(e) => pickImportImages(e.target.files)}
+                  className="text-sm text-gray-700 file:mr-3 file:rounded-lg file:border-0 file:bg-indigo-50 file:px-4 file:py-2 file:text-sm file:font-medium file:text-indigo-700 hover:file:bg-indigo-100"
+                />
+                <select
+                  value={imageDomainId}
+                  onChange={(e) => setImageDomainId(e.target.value)}
+                  className="rounded-lg border border-gray-200 px-3 py-2 text-sm"
+                >
+                  <option value="">Choose Domain</option>
+                  {domains.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name}
+                    </option>
+                  ))}
+                </select>
+                {imageItems.length > 0 && (
+                  <select
+                    defaultValue=""
+                    onChange={(e) => {
+                      if (e.target.value) setAllImageDifficulty(e.target.value);
+                      e.target.value = "";
+                    }}
+                    className="rounded-lg border border-gray-200 px-3 py-2 text-sm capitalize"
+                    aria-label="Set difficulty for all images"
+                  >
+                    <option value="">Set difficulty for all</option>
+                    {DIFFICULTIES.map((d) => (
+                      <option key={d} value={d}>
+                        {d}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <button
+                  type="submit"
+                  disabled={!imageImportReady || isImporting}
+                  className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  {isImporting
+                    ? "Importing…"
+                    : `Upload${imageItems.length ? ` ${imageItems.length} question${imageItems.length === 1 ? "" : "s"}` : ""}`}
+                </button>
+              </div>
+
+              {imageItems.length > 0 && (
+                <ul className="mt-4 divide-y divide-gray-100 rounded-lg border border-gray-200">
+                  {imageItems.map((item, index) => (
+                    <li key={item.id} className="flex flex-wrap items-center gap-3 p-3">
+                      <span className="w-6 text-sm text-gray-400">{index + 1}</span>
+                      <img src={item.url} alt="" className="h-16 w-24 rounded border border-gray-200 object-contain" />
+                      <span className="min-w-0 flex-1 truncate text-sm text-gray-700" title={item.file.name}>
+                        {item.file.name}
+                      </span>
+                      <select
+                        value={item.correct}
+                        onChange={(e) => updateImageItem(item.id, { correct: e.target.value })}
+                        aria-label={`Correct answer for ${item.file.name}`}
+                        className={`rounded-lg border px-3 py-2 text-sm ${
+                          item.correct ? "border-gray-200" : "border-amber-400 bg-amber-50"
+                        }`}
+                      >
+                        <option value="">Correct answer</option>
+                        {IMAGE_ANSWER_LETTERS.map((letter) => (
+                          <option key={letter} value={letter}>
+                            {letter}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        value={item.difficulty}
+                        onChange={(e) => updateImageItem(item.id, { difficulty: e.target.value })}
+                        aria-label={`Difficulty for ${item.file.name}`}
+                        className="rounded-lg border border-gray-200 px-3 py-2 text-sm capitalize"
+                      >
+                        {DIFFICULTIES.map((d) => (
+                          <option key={d} value={d}>
+                            {d}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => removeImageItem(item.id)}
+                        className="text-sm font-medium text-red-600 hover:underline"
+                      >
+                        Remove
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </form>
+          )}
+
+          {importMode === "text" && (
+          <>
           <p className="mt-1 text-sm text-gray-500">
             Upload a JSON file containing an array of questions (Domain, Difficulty, Question Text, Option
             A-D, Correct Option, ...)
@@ -582,6 +802,8 @@ export default function AdminPage() {
               {isImporting ? "Importing…" : "Upload"}
             </button>
           </form>
+          </>
+          )}
 
           {importResult && (
             <div className="mt-4 rounded-lg bg-green-50 px-4 py-3 text-sm text-green-800">

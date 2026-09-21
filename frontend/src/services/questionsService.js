@@ -116,6 +116,23 @@ export async function importQuestionsFile(file, domainId = null) {
   });
 }
 
+// Bulk image-based questions. `items` is [{ file, correct: "A".."D",
+// difficulty: "easy"|"medium"|"hard" }]; the server pairs files and
+// metadata by position.
+export async function importQuestionImages(items, domainId) {
+  const formData = new FormData();
+  formData.append("domain_id", String(domainId));
+  items.forEach((item) => formData.append("images", item.file));
+  formData.append(
+    "metadata",
+    JSON.stringify(items.map((item) => ({ correct: item.correct, difficulty: item.difficulty })))
+  );
+  return apiFetch("/questions/admin/questions/import-images/", {
+    method: "POST",
+    body: formData,
+  });
+}
+
 // -- Admin: RAG generation from an uploaded PDF/DOCX -------------------------
 
 export async function generateQuestionsFromFile(file, { questionTypes = [], domains = [], targetPerDomain = 10 } = {}) {
