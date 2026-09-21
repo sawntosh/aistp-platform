@@ -20,7 +20,7 @@ class LoginUnitTests(APITestCase):
         cache.clear()  # login-failure lockout counters are cache-backed
         self.password = "Str0ngPass!23"
         self.user = User.objects.create_user(
-            username="keshav", email="kesh@gmail.com", password=self.password
+            username="kesh", email="kesh@gmail.com", password=self.password
         )
         self.user.email_verified = True
         self.user.save(update_fields=["email_verified"])
@@ -33,6 +33,23 @@ class LoginUnitTests(APITestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("access", response.data)
         self.assertIn("refresh", response.data)
+
+    def test_correct_email_and_password_returns_tokens(self):
+        response = self._login("kesh@gmail.com", self.password)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("access", response.data)
+
+    def test_email_login_is_case_insensitive_and_trimmed(self):
+        response = self._login("  KESH@Gmail.com ", self.password)
+        self.assertEqual(response.status_code, 200)
+
+    def test_email_with_wrong_password_is_rejected(self):
+        response = self._login("kesh@gmail.com", "totally-wrong-1A!")
+        self.assertEqual(response.status_code, 401)
+
+    def test_unknown_email_is_rejected(self):
+        response = self._login("nobody@gmail.com", self.password)
+        self.assertEqual(response.status_code, 401)
 
     def test_wrong_password_is_rejected(self):
         response = self._login("kesh", "totally-wrong-1A!")
