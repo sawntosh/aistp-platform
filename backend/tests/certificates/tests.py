@@ -9,7 +9,7 @@ from rest_framework.test import APITestCase
 
 from questions.models import PracticeSession
 
-from .models import Certificate
+from certificates.models import Certificate
 
 User = get_user_model()
 
