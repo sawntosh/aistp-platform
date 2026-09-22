@@ -7,7 +7,7 @@ API input-validation regression tests.
 from django.contrib.auth import get_user_model
 from rest_framework.test import APITestCase
 
-from .models import AnswerOption, Domain, FillBlankAnswer, PracticeSession, Question
+from questions.models import AnswerOption, Domain, FillBlankAnswer, PracticeSession, Question
 
 User = get_user_model()
 

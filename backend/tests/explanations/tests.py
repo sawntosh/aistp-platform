@@ -8,8 +8,8 @@ from rest_framework.test import APITestCase
 from questions.models import AnswerOption, Domain, FillBlankAnswer, MatchingPair, Question
 from services.explanation_service import ExplanationServiceError, build_fallback_explanation, generate_explanation
 
-from .models import AIExplanation
-from .views import _build_answer_context, _context_hash
+from explanations.models import AIExplanation
+from explanations.views import _build_answer_context, _context_hash
 
 
 class ExplainViewTests(APITestCase):
