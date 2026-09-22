@@ -11,7 +11,7 @@ from rest_framework.test import APITestCase
 
 from analytics.models import PerformanceAnalytics
 
-from .models import AnswerOption, Attempt, Domain, PracticeSession, Question
+from questions.models import AnswerOption, Attempt, Domain, PracticeSession, Question
 
 User = get_user_model()
 

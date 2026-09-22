@@ -78,7 +78,6 @@ py -3.12 -m venv venv
 cd backend
 .\dev.ps1
 ```
-`dev.ps1` activates nothing manually needed — it drives the venv's own Python directly. It installs `requirements.txt` only when the file has changed since the last run, applies pending migrations, seeds the question bank and Study Mode content (both commands skip themselves once the database is already populated), and then starts `runserver`. After the first run, re-running it just starts the server in a couple of seconds instead of redoing all of the above.
 
 On macOS/Linux, or if you'd rather run the steps yourself:
 ```bash
@@ -115,9 +114,29 @@ App runs at `http://localhost:3000` · API at `http://127.0.0.1:8000/api/` · Dj
 
 ### Tests
 
+All backend tests live under `backend/tests/`, one folder per app (`accounts`, `analytics`, `certificates`, `explanations`, `questions`, `study`).
+
+Run the whole suite:
 ```bash
 cd backend
-python manage.py test questions analytics study --noinput
+python manage.py test
+```
+
+Run one app's tests, one file, or one test method by dotted path:
+```bash
+python manage.py test tests.questions
+python manage.py test tests.questions.tests_admin_management
+python manage.py test tests.questions.tests_admin_management.AdminQuestionListRetrieveTests
+```
+
+**Admin endpoint tests** — coverage for the admin-only question CRUD and RAG generation-job endpoints (`AdminQuestionViewSet`, `AdminGenerationJobViewSet`) lives in `backend/tests/questions/tests_admin_management.py`:
+```bash
+python manage.py test tests.questions.tests_admin_management
+```
+
+`pytest` also works (reads `backend/pytest.ini`):
+```bash
+python -m pytest tests/questions/tests_admin_management.py
 ```
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
@@ -130,8 +149,7 @@ Start the backend (`python manage.py runserver`) and open:
 | URL | What it is |
 |-----|------------|
 | `http://127.0.0.1:8000/api/docs/`   | **Swagger UI** — browse and try every endpoint |
-| `http://127.0.0.1:8000/api/redoc/`  | **ReDoc** — reference-style rendering |
-| `http://127.0.0.1:8000/api/schema/` | Raw OpenAPI 3 schema |
+
 
 ### Endpoint groups
 

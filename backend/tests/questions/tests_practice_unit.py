@@ -9,7 +9,7 @@ student goes through, kept small and self-contained.
 from django.contrib.auth import get_user_model
 from rest_framework.test import APITestCase
 
-from .models import AnswerOption, Domain, PracticeSession, Question
+from questions.models import AnswerOption, Domain, PracticeSession, Question
 
 User = get_user_model()
 

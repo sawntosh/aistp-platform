@@ -13,7 +13,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from PIL import Image
 from rest_framework.test import APITestCase
 
-from .models import AnswerOption, Domain, PracticeSession, Question
+from questions.models import AnswerOption, Domain, PracticeSession, Question
 
 User = get_user_model()
 

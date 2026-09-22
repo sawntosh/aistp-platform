@@ -7,7 +7,7 @@ client (?questions=) because a PracticeSession doesn't persist them.
 from django.contrib.auth import get_user_model
 from rest_framework.test import APITestCase
 
-from .models import AnswerOption, Domain, PracticeSession, Question
+from questions.models import AnswerOption, Domain, PracticeSession, Question
 
 User = get_user_model()
 
