@@ -39,7 +39,7 @@ export default function App({ Component, pageProps }) {
     <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
       <Head>
         <title>AISTP · ISTQB CTFL Practice Platform</title>
-        <meta name="description" content="Study and test yourself for the ISTQB Certified Tester Foundation Level exam with AI-guided explanations and domain analytics." />
+        <meta name="description" content="Study and test yourself for the ISTQB Certified Tester Foundation Level exam with clear answer explanations and domain analytics." />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </Head>
       <div className={`${sans.variable} ${serif.variable} font-sans`}>

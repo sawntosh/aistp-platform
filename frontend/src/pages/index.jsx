@@ -8,7 +8,7 @@ import { Card } from "../components/ui/Card";
 const FEATURES = [
   {
     icon: Sparkles,
-    title: "AI explanations",
+    title: "Clear explanations",
     description: "Ask for a plain-English explanation on any question you're unsure about.",
   },
   {

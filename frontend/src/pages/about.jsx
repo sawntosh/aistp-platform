@@ -29,7 +29,7 @@ export default function AboutPage() {
             About AISTP
           </Badge>
           <h1 className="mt-4 text-display leading-[1.1] text-text-primary">
-            The AI Assisted Software Testing Practice Platform
+            The Software Testing Practice Platform
           </h1>
           <p className="mt-4 text-body-lg text-text-muted">
             AISTP helps you prepare for the ISTQB Certified Tester Foundation Level (CTFL) exam with practice

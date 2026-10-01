@@ -57,7 +57,7 @@ export default function FeedbackPanel({
               className="flex cursor-pointer items-center gap-1.5 text-body-sm font-medium text-primary hover:underline disabled:opacity-50"
             >
               <Lightbulb className="h-4 w-4" aria-hidden="true" />
-              {isLoadingExplanation ? "Asking AI tutor…" : "Explain this answer"}
+              {isLoadingExplanation ? "Loading explanation…" : "Explain this answer"}
             </button>
           )}
           {explanationError && <p className="mt-2 text-body-sm text-error">{explanationError}</p>}
@@ -65,7 +65,7 @@ export default function FeedbackPanel({
             <div className="mt-1 rounded-md border border-border bg-surface p-4">
               {isExplanationFallback && (
                 <p className="mb-1.5 text-caption font-medium text-warning">
-                  The AI tutor is unavailable right now. Here&apos;s a basic explanation.
+                  A detailed explanation isn&apos;t available right now. Here&apos;s a basic explanation.
                 </p>
               )}
               <RichText text={explanation} />

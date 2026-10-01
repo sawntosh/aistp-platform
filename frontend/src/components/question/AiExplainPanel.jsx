@@ -52,15 +52,15 @@ export default function AiExplainPanel({ questionId, available = true, className
         "flex flex-col rounded-xl border border-border bg-surface p-5",
         className
       )}
-      aria-label="AI explanation"
+      aria-label="Answer explanation"
     >
       <p className="flex items-center gap-2 text-body-sm font-semibold text-text-primary">
         <Sparkles className="h-4 w-4 text-test" aria-hidden="true" />
-        Ask AI to explain
+        Explain this question
       </p>
 
       <div className="mt-3 rounded-lg bg-surface-muted p-3 text-body-sm text-text-secondary">
-        Hi! I&apos;m your AI tutor. Get a plain-language explanation of this question and the
+        Get a plain-language explanation of this question and the
         concepts behind it.
       </div>
 
@@ -92,7 +92,7 @@ export default function AiExplainPanel({ questionId, available = true, className
                 className="mt-1 inline-flex items-center gap-1.5 text-body-sm font-medium text-primary hover:underline disabled:opacity-50"
               >
                 <Lightbulb className="h-4 w-4" aria-hidden="true" />
-                {isLoading ? "Asking the AI tutor…" : "Explain this answer"}
+                {isLoading ? "Loading explanation…" : "Explain this answer"}
               </button>
             </div>
           )}
@@ -103,7 +103,7 @@ export default function AiExplainPanel({ questionId, available = true, className
             <div className="mt-4 rounded-lg border border-border bg-surface-muted/60 p-4">
               {isFallback && (
                 <p className="mb-1.5 text-caption font-medium text-warning">
-                  The AI tutor is unavailable right now. Here&apos;s a basic explanation.
+                  A detailed explanation isn&apos;t available right now. Here&apos;s a basic explanation.
                 </p>
               )}
               <RichText text={explanation} />
@@ -113,7 +113,7 @@ export default function AiExplainPanel({ questionId, available = true, className
       )}
 
       <p className="mt-4 border-t border-border pt-3 text-caption text-text-muted">
-        AI responses may contain mistakes. Scoring is always rule-based, never AI.
+        Explanations are generated automatically and may contain mistakes. Your score is always calculated by fixed marking rules.
       </p>
     </aside>
   );

@@ -114,7 +114,7 @@ def render_certificate_pdf(certificate):
     pdf.set_text_color(*GREY)
     pdf.set_char_spacing(0.5)
     pdf.set_xy(24, 29)
-    pdf.cell(90, 4, "AI-ASSISTED SOFTWARE TESTING PLATFORM")
+    pdf.cell(90, 4, "SOFTWARE TESTING PRACTICE PLATFORM")
     pdf.set_char_spacing(0.0)
     pdf.set_font("Helvetica", "B", 7.5)
     pdf.set_text_color(*NAVY)

@@ -269,7 +269,7 @@ export default function RegisterPage() {
               type="email"
               required
               autoComplete="email"
-              placeholder="name123@gmail.com"
+              placeholder="you@example.com"
               title="Gmail address with at least one letter before @, e.g. name123@gmail.com"
               value={form.email}
               onChange={handleChange}

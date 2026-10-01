@@ -202,5 +202,5 @@ def build_fallback_explanation(correct_summary):
     """
     return (
         f"The correct answer is: {correct_summary}. "
-        "An AI-generated explanation isn't available right now -- please try again shortly for a full breakdown."
+        "A detailed explanation isn't available right now -- please try again shortly for a full breakdown."
     )

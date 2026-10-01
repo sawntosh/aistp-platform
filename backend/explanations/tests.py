@@ -182,7 +182,7 @@ class ExplanationServiceFallbackTests(SimpleTestCase):
         text = build_fallback_explanation("A flaw in the software")
 
         self.assertIn("A flaw in the software", text)
-        self.assertIn("AI-generated explanation isn't available", text)
+        self.assertIn("detailed explanation isn't available", text)
 
     @patch("services.explanation_service.client")
     def test_generate_explanation_retries_once_before_succeeding(self, mock_client):

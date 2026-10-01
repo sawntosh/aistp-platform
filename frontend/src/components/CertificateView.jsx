@@ -89,7 +89,7 @@ export function CertificateCanvas({
             <div style={{ textAlign: "left" }}>
               <p style={{ fontSize: 24, fontWeight: 800, letterSpacing: "-0.01em", lineHeight: 1 }}>AISTP</p>
               <p style={{ marginTop: 4, fontSize: 8.5, letterSpacing: "0.14em", color: GREY }}>
-                AI-ASSISTED SOFTWARE TESTING PLATFORM
+                SOFTWARE TESTING PRACTICE PLATFORM
               </p>
             </div>
           </div>
