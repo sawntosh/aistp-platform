@@ -6,11 +6,37 @@ import re
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 from .models import User
 
 USERNAME_RE = re.compile(r"^[A-Za-z]+$")
 USERNAME_MIN_LENGTH = 3
+
+
+def resolve_login_identifier(identifier):
+    """Map what the user typed on the login form to a username.
+
+    Usernames are letters-only, so anything containing "@" can only be an
+    email. Emails are unique (case-insensitively) at registration. If no
+    account matches, the identifier is returned unchanged so authentication
+    fails exactly as it would for an unknown username.
+    """
+    identifier = (identifier or "").strip()
+    if "@" in identifier:
+        match = User.objects.filter(email__iexact=identifier).first()
+        if match is not None:
+            return match.username
+    return identifier
+
+
+class LoginSerializer(TokenObtainPairSerializer):
+    """SimpleJWT login that accepts either a username or an email address in
+    the ``username`` field."""
+
+    def validate(self, attrs):
+        attrs["username"] = resolve_login_identifier(attrs.get("username"))
+        return super().validate(attrs)
 
 
 class UserSerializer(serializers.ModelSerializer):

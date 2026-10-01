@@ -45,14 +45,16 @@ export default function LoginPage() {
     setNeedsVerification(false);
     setUnverifiedEmail("");
 
-    if (!/^[A-Za-z]+$/.test(form.username)) {
-      showError("Username must contain letters only (A–Z).");
+    const identifier = form.username.trim();
+    const isEmail = identifier.includes("@");
+    if (!isEmail && !/^[A-Za-z]+$/.test(identifier)) {
+      showError("Enter a valid username (letters only) or email address.");
       return;
     }
 
     setIsSubmitting(true);
     try {
-      const me = await login(form);
+      const me = await login({ ...form, username: identifier });
       if (me.role !== role) {
         logout();
         showError(`This account is a ${otherRole.label} account. Switch to "${otherRole.label}" above and try again.`);
@@ -68,7 +70,7 @@ export default function LoginPage() {
       } else if (err?.status === 423) {
         showError(err?.body?.detail || "Too many failed attempts. Try again shortly.");
       } else if (err?.status === 401) {
-        showError("Invalid username or password.");
+        showError("Invalid username/email or password.");
       } else if (!err?.status) {
         // fetch threw before a response -- server down, wrong API URL, or CORS.
         showError("Couldn't reach the server. Check that the backend is running and try again.");
@@ -118,12 +120,13 @@ export default function LoginPage() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <Label htmlFor="username">Username</Label>
+            <Label htmlFor="username">Username or email</Label>
             <Input
               id="username"
               name="username"
               type="text"
               required
+              placeholder="Enter your username or email"
               autoComplete="username"
               value={form.username}
               onChange={handleChange}

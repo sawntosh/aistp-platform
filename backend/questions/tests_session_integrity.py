@@ -110,3 +110,26 @@ class SessionAttemptIntegrityTests(APITestCase):
         self.assertEqual(self._submit(session, self.q2, self.q2_correct).status_code, 200)
         finish = self.client.post(f"/api/questions/sessions/{session.id}/finish/")
         self.assertEqual(finish.data["score"], 2)
+
+    # -- question must belong to the session ---------------------------
+    def test_submit_for_question_not_served_in_session_is_rejected(self):
+        """A session that recorded its served questions must reject answers
+        for any other question -- otherwise Practice Mode leaks the answer
+        key for arbitrary questions and Test Mode records analytics for
+        questions that were never part of the exam."""
+        for mode in (PracticeSession.Mode.PRACTICE, PracticeSession.Mode.TEST):
+            session = PracticeSession.objects.create(
+                user=self.user, question_count=1, mode=mode, question_ids=[self.q1.id]
+            )
+            response = self._submit(session, self.q2, self.q2_correct)
+            self.assertEqual(response.status_code, 400)
+            self.assertNotIn("correct_option_ids", response.data)
+            self.assertFalse(Attempt.objects.filter(session=session).exists())
+
+        self.assertFalse(PerformanceAnalytics.objects.filter(user=self.user).exists())
+
+    def test_served_question_is_still_accepted(self):
+        session = PracticeSession.objects.create(
+            user=self.user, question_count=1, question_ids=[self.q1.id]
+        )
+        self.assertEqual(self._submit(session, self.q1, self.q1_correct).status_code, 200)

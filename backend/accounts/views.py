@@ -30,11 +30,13 @@ from .serializers import (
     USERNAME_RE,
     ChangePasswordSerializer,
     EmailVerificationSerializer,
+    LoginSerializer,
     PasswordResetConfirmSerializer,
     PasswordResetRequestSerializer,
     RegisterSerializer,
     ResendVerificationSerializer,
     UserSerializer,
+    resolve_login_identifier,
 )
 
 User = get_user_model()
@@ -75,9 +77,14 @@ class LoginView(TokenObtainPairView):
     - correct+verified  -> 200 with access/refresh
     """
     throttle_scope = "login"
+    serializer_class = LoginSerializer
 
     def post(self, request, *args, **kwargs):
-        ident = lockout.identity(request.data.get("username"), request)
+        # Key the lockout on the resolved username so alternating between a
+        # username and its email can't double the allowed attempts.
+        ident = lockout.identity(
+            resolve_login_identifier(request.data.get("username")), request
+        )
 
         if lockout.is_locked(ident):
             return Response(
