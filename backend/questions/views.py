@@ -360,6 +360,14 @@ class AnswerSubmitView(APIView):
                 {"detail": "This session is already finished; no more answers can be submitted."},
                 status=status.HTTP_409_CONFLICT,
             )
+        # Only questions this session actually served may be answered.
+        # Sessions created before question_ids existed have an empty list
+        # and skip this check rather than rejecting every answer.
+        if session.question_ids and question.id not in session.question_ids:
+            return Response(
+                {"detail": "This question is not part of this session."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         # Re-submitting a question that already has an Attempt *edits* that
         # answer in place (the learner pressed "Change answer" before
         # finishing the exam). Only a genuinely new answer has to fit inside
